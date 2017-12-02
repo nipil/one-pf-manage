@@ -5,17 +5,11 @@ import os
 import subprocess
 
 
-class App:
+class OpenNebula:
 
     ENV_ONEXMLRPC="ONE_XMLRPC"
 
     ONE_COMMANDS=["oneuser"]
-
-    def __init__(self, args):
-        self.args = args
-        self.setup_logging()
-        self.verify_environment()
-        self.verify_commands()
 
     @classmethod
     def verify_environment(cls):
@@ -39,8 +33,40 @@ class App:
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL)
             except Exception as e:
-                raise Exception("Error while running command '{0}', reason : {1}".format(command, e))
+                raise Exception("Error while running command (reason : {1})".format(command, e))
             logging.info("Command '{0}' found, returned {1}".format(command, result.returncode))
+
+    @staticmethod
+    def verify_login():
+        cmds = ["oneuser", "show"]
+        try:
+            result = subprocess.run(
+                cmds,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL)
+        except Exception as e:
+            raise Exception("Error while running command, try to log "
+                "in using `oneuser login your_user_name --force` "
+                "first (reason : {1})".format(cmds, e))
+        logging.info("User has a valid authorization token")
+
+    @classmethod
+    def verify(cls):
+        cls.verify_environment()
+        cls.verify_commands()
+        cls.verify_login()
+
+    def __init__(self):
+        pass
+
+
+class App:
+
+    def __init__(self, args):
+        self.args = args
+        self.setup_logging()
+        OpenNebula.verify()
 
     def setup_logging(self):
         # root logger
