@@ -1,20 +1,36 @@
 #!/usr/bin/env python3
 
+import os
 import json
 import logging
 
 
 class App:
 
+    ENV_ONEXMLRPC="ONE_XMLRPC"
+
     def __init__(self, args):
         self.args = args
         self.setup_logging()
+        self.verify_environment()
+
+    @classmethod
+    def verify_environment(cls):
+        endpoint = os.environ.get(cls.ENV_ONEXMLRPC)
+        if endpoint is None:
+            raise Exception(
+                "Undefined environment variable {0}, define it with : "
+                "export {0}=\"http://your_opennebula_host:2633/RPC2\""
+                .format(cls.ENV_ONEXMLRPC))
+        else:
+            logging.info("Using {0}={1} to commicate with OpenNebula"
+                .format(cls.ENV_ONEXMLRPC, endpoint))
 
     def setup_logging(self):
         # root logger
         numeric_level = getattr(logging, self.args.log_level.upper())
-        self.root_logger = logging.getLogger()
-        self.root_logger.setLevel(numeric_level)
+        root_logger = logging.getLogger()
+        root_logger.setLevel(numeric_level)
         # format
         log_format = "%(message)s"
         if numeric_level == logging.DEBUG:
@@ -30,7 +46,7 @@ class App:
         # finalize
         formatter = logging.Formatter(log_format)
         handler.setFormatter(formatter)
-        self.root_logger.addHandler(handler)
+        root_logger.addHandler(handler)
         logging.debug("Command line arguments: {0}".format(args))
 
     def run(self):
