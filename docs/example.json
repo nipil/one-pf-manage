@@ -1,0 +1,19 @@
+{
+    "formatVersion":"1",
+    "platformName":"project-version",
+    "templates":{
+        "ttylinux":{
+            "cpu_percent": 1,
+            "vcpu_count": 1,
+            "mem_mb": 128,
+            "image": "ttylinux",
+            "networks":[
+                "cloud"
+            ]
+        }
+    },
+    "hosts":{
+        "srv1":"ttylinux",
+        "srv2":"ttylinux"
+    }
+}
