@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 
-import os
-import json
 import logging
+import os
+import subprocess
 
 
 class App:
 
     ENV_ONEXMLRPC="ONE_XMLRPC"
 
+    ONE_COMMANDS=["oneuser"]
+
     def __init__(self, args):
         self.args = args
         self.setup_logging()
         self.verify_environment()
+        self.verify_commands()
 
     @classmethod
     def verify_environment(cls):
@@ -25,6 +28,19 @@ class App:
         else:
             logging.info("Using {0}={1} to commicate with OpenNebula"
                 .format(cls.ENV_ONEXMLRPC, endpoint))
+
+    @classmethod
+    def verify_commands(cls):
+        for command in cls.ONE_COMMANDS:
+            retult = None
+            try:
+                result = subprocess.run(
+                    [command, "--version"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL)
+            except Exception as e:
+                raise Exception("Error while running command '{0}', reason : {1}".format(command, e))
+            logging.info("Command '{0}' found, returned {1}".format(command, result.returncode))
 
     def setup_logging(self):
         # root logger
