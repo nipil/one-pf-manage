@@ -3,13 +3,27 @@
 import logging
 import os
 import subprocess
+import xml.etree.ElementTree as ElementTree
 
 
 class OpenNebula:
 
     ENV_ONEXMLRPC="ONE_XMLRPC"
 
-    ONE_COMMANDS=["oneuser"]
+    ONE_COMMANDS=["oneuser", "onevm"]
+
+    @staticmethod
+    def command_xml(name, *args):
+        command = [name, *args, "--xml"]
+        try:
+            result = subprocess.run(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE)
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
+        logging.debug(result.stdout)
+        return result.stdout.decode()
 
     @classmethod
     def verify_environment(cls):
@@ -33,32 +47,34 @@ class OpenNebula:
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL)
             except Exception as e:
-                raise Exception("Error while running command (reason : {1})".format(command, e))
+                raise Exception("Error while running command (reason : {0})".format(command, e))
             logging.info("Command '{0}' found, returned {1}".format(command, result.returncode))
 
-    @staticmethod
-    def verify_login():
-        cmds = ["oneuser", "show"]
+    def set_user_info(self):
         try:
-            result = subprocess.run(
-                cmds,
-                check=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL)
+            result = self.command_xml("oneuser", "show")
         except Exception as e:
             raise Exception("Error while running command, try to log "
                 "in using `oneuser login your_user_name --force` "
-                "first (reason : {1})".format(cmds, e))
+                "first (reason : {0})".format(e))
         logging.info("User has a valid authorization token")
+        logging.debug("User has a valid authorization token")
+        root = ElementTree.fromstring(result)
+        self.uid = int(root.find("ID").text)
+        self.gid = int(root.find("GID").text)
+        logging.debug("uid={0} gid={0}".format(self.uid, self.gid))
 
-    @classmethod
-    def verify(cls):
-        cls.verify_environment()
-        cls.verify_commands()
-        cls.verify_login()
+    def list_vm(self):
+        try:
+            result = self.command_xml("onevm", "list")
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
+        root = ElementTree.fromstring(result)
+        for vm_elem in root.findall("VM"):
+            ElementTree.dump(vm_elem)
 
     def __init__(self):
-        pass
+        self.set_user_info()
 
 
 class App:
@@ -66,7 +82,9 @@ class App:
     def __init__(self, args):
         self.args = args
         self.setup_logging()
-        OpenNebula.verify()
+        OpenNebula.verify_environment()
+        OpenNebula.verify_commands()
+        self.one = OpenNebula()
 
     def setup_logging(self):
         # root logger
@@ -92,8 +110,7 @@ class App:
         logging.debug("Command line arguments: {0}".format(args))
 
     def run(self):
-        pass
-
+        vms = self.one.list_vm()
 
 if __name__ == '__main__':
 
