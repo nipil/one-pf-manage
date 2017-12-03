@@ -10,10 +10,28 @@
             "networks":[
                 "cloud"
             ]
+        },
+        "ttylinux_multi_network":{
+            "cpu_percent": 1,
+            "vcpu_count": 1,
+            "mem_mb": 128,
+            "image": "ttylinux",
+            "networks":[
+                "cloud",
+                "cloud"
+            ]
+        },
+        "ttylinux_no_network":{
+            "cpu_percent": 1,
+            "vcpu_count": 1,
+            "mem_mb": 128,
+            "image": "ttylinux",
+            "networks":[]
         }
     },
     "hosts":{
         "srv1":"ttylinux",
-        "srv2":"ttylinux"
+        "srv2":"ttylinux_no_network",
+        "srv3":"ttylinux_multi_network"
     }
 }
