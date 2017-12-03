@@ -18,6 +18,7 @@ class VmInfo:
             vcpu = 1
         else:
             vcpu = int(vcpu.text)
+        networks = [ x.text for x in vm_xml.findall("TEMPLATE/NIC/NETWORK") ]
         return VmInfo(
             int(vm_xml.find("ID").text),
             vm_xml.find("NAME").text,
@@ -26,7 +27,7 @@ class VmInfo:
             vcpu,
             vm_xml.find("TEMPLATE/DISK/IMAGE").text,
             int(vm_xml.find("TEMPLATE/MEMORY").text),
-            vm_xml.find("TEMPLATE/NIC/NETWORK").text)
+            networks)
 
     @staticmethod
     def fromJsonDefinition(vm_name, vm_json_template):
@@ -107,6 +108,7 @@ class OpenNebula:
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
         root = ElementTree.fromstring(result)
+        # ElementTree.dump(root)
         for vm_elem in root.findall("VM"):
             vm = VmInfo.fromOneXml(vm_elem)
             vms[vm.name] = vm
@@ -135,6 +137,10 @@ class OpenNebula:
 
     def vm_destroy(self, vm_info):
         logging.debug("Destroying vm: {0}".format(vm_info))
+        try:
+            result = self.command("onevm", "delete", str(vm_info.id))
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
 
     def __init__(self):
         self.set_user_info()
@@ -199,21 +205,21 @@ class App:
 
     def verify(self, vm_name):
         logging.info("Verifying VM {0}".format(vm_name))
-        pass
 
     def destroy(self, vm_name):
-        logging.info("Destroying VM {0}".format(vm_name))
-        self.one.vm_destroy(self.existing[vm_name])
+        logging.warning("Destroying unreferenced VM {0}".format(vm_name))
+        vm = self.existing[vm_name]
+        self.one.vm_destroy(vm)
+        logging.info("Destroyed VM with ID {0}".format(vm.id))
 
     def list(self, platformName):
         vms = self.one.vm_list()
         # ignoring VM without our prefix
-        keys = [ x for x in vms.keys() ]
-        for key in keys:
-            vm = vms[key]
-            if not vm.name.startswith(platformName):
-                logging.debug("Ignoring VM {0}".format(vm.name))
-                vms.pop(key)
+        vms = {
+            key:value for key, value in vms.items()
+            if value.name.startswith("{0}-".format(platformName))
+        }
+        logging.debug("Filtered VM {0}".format(vms))
         return vms
 
     def run(self):
@@ -240,28 +246,11 @@ if __name__ == '__main__':
 
     try:
         parser = argparse.ArgumentParser(description="one-pf-manage")
-        parser.add_argument("-l",
-                            "--log-level",
-                            metavar="LVL",
-                            choices=[
-                                "critical",
-                                "error",
-                                "warning",
-                                "info",
-                                "debug"],
-                            default="warning")
-        parser.add_argument("action",
-                            choices=[
-                                "create",
-                                "update",
-                                "destroy"])
+        parser.add_argument("-l", "--log-level", metavar="LVL", choices=["critical", "error", "warning", "info", "debug"], default="warning")
         parser.add_argument("jsonfile")
-
         args = parser.parse_args()
-
         app = App(args)
         app.run()
-
         sys.exit(0)
 
     except KeyboardInterrupt as e:
