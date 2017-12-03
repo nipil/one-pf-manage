@@ -205,6 +205,28 @@ class App:
 
     def verify(self, vm_name):
         logging.info("Verifying VM {0}".format(vm_name))
+        current = self.existing[vm_name]
+        target = self.target[vm_name]
+        if current.name != target.name:
+            raise Exception("Both VM do not refer to the same host")
+        differs = False
+        if current.cpu != target.cpu:
+            logging.warning("VM {0} has {1} cpu but should have {2}".format(current.name, current.cpu, target.cpu))
+            differs = True
+        if current.vcpu != target.vcpu:
+            logging.warning("VM {0} has {1} vcpu but should have {2}".format(current.name, current.vcpu, target.vcpu))
+            differs = True
+        if current.mem_mb != target.mem_mb:
+            logging.warning("VM {0} has {1} mem_mb but should have {2}".format(current.name, current.mem_mb, target.mem_mb))
+            differs = True
+        if current.image != target.image:
+            logging.warning("VM {0} has {1} image but should have {2}".format(current.name, current.image, target.image))
+            differs = True
+        if current.networks != target.networks:
+            logging.warning("VM {0} has {1} networks but should have {2}".format(current.name, current.networks, target.networks))
+            differs = True
+        if differs:
+            logging.warning("VM {0} needs reconfiguration".format(current.name))
 
     def destroy(self, vm_name):
         logging.warning("Destroying unreferenced VM {0}".format(vm_name))
