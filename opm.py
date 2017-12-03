@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 import subprocess
 import xml.etree.ElementTree as ElementTree
 
@@ -60,8 +61,8 @@ class OpenNebula:
     ONE_COMMANDS=["oneuser", "onevm"]
 
     @staticmethod
-    def command_xml(name, *args):
-        command = [name, *args, "--xml"]
+    def command(name, *args):
+        command = [name, *args]
         try:
             result = subprocess.run(command, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         except Exception as e:
@@ -91,7 +92,7 @@ class OpenNebula:
 
     def set_user_info(self):
         try:
-            result = self.command_xml("oneuser", "show")
+            result = self.command("oneuser", "show", "--xml")
         except Exception as e:
             raise Exception("Error while running command, try to log in using `oneuser login your_user_name --force` first (reason : {0})".format(e))
         root = ElementTree.fromstring(result)
@@ -102,7 +103,7 @@ class OpenNebula:
     def vm_list(self):
         vms = {}
         try:
-            result = self.command_xml("onevm", "list")
+            result = self.command("onevm", "list", "--xml")
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
         root = ElementTree.fromstring(result)
@@ -114,7 +115,23 @@ class OpenNebula:
 
     def vm_create(self, vm_info):
         logging.debug("Creating vm: {0}".format(vm_info))
-
+        args = ["--name", vm_info.name,
+                "--cpu", str(vm_info.cpu),
+                "--vcpu", str(vm_info.vcpu),
+                "--memory", "{0}m".format(vm_info.mem_mb),
+                "--disk", vm_info.image]
+        if len(vm_info.networks) > 0:
+            args.append("--nic")
+            args.append(",".join(vm_info.networks))
+        try:
+            result = self.command("onevm", "create", *args)
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
+        # store vm id number
+        m = re.search(r'^ID: (\d+)$', result)
+        if not m:
+            raise Exception("Could not detect VM id after creation")
+        vm_info.id = int(m.group(1))
 
     def vm_destroy(self, vm_info):
         logging.debug("Destroying vm: {0}".format(vm_info))
@@ -176,7 +193,9 @@ class App:
 
     def create(self, vm_name):
         logging.warning("VM {0} does not exist, creating it".format(vm_name))
-        self.one.vm_create(self.target[vm_name])
+        vm = self.target[vm_name]
+        self.one.vm_create(vm)
+        logging.info("Created VM with ID {0}".format(vm.id))
 
     def verify(self, vm_name):
         logging.info("Verifying VM {0}".format(vm_name))
