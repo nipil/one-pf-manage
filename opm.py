@@ -9,23 +9,48 @@ import xml.etree.ElementTree as ElementTree
 
 class VmInfo:
 
-    def __init__(self, vm_xml):
+    @staticmethod
+    def fromOneXml(vm_xml):
         # ElementTree.dump(vm_xml)
-        self.id = int(vm_xml.find("ID").text)
-        self.name = vm_xml.find("NAME").text
-        self.state = int(vm_xml.find("STATE").text)
-        self.cpu = float(vm_xml.find("TEMPLATE/CPU").text)
         vcpu = vm_xml.find("TEMPLATE/VCPU")
         if vcpu is None:
-            self.vcpu = 1
+            vcpu = 1
         else:
-            self.vcpu = int(vcpu.text)
-        self.image = vm_xml.find("TEMPLATE/DISK/IMAGE").text
-        self.mem_mb = int(vm_xml.find("TEMPLATE/MEMORY").text)
-        self.network = vm_xml.find("TEMPLATE/NIC/NETWORK").text
+            vcpu = int(vcpu.text)
+        return VmInfo(
+            int(vm_xml.find("ID").text),
+            vm_xml.find("NAME").text,
+            int(vm_xml.find("STATE").text),
+            float(vm_xml.find("TEMPLATE/CPU").text),
+            vcpu,
+            vm_xml.find("TEMPLATE/DISK/IMAGE").text,
+            int(vm_xml.find("TEMPLATE/MEMORY").text),
+            vm_xml.find("TEMPLATE/NIC/NETWORK").text)
+
+    @staticmethod
+    def fromJsonDefinition(vm_name, vm_json_template):
+        return VmInfo(
+            None,
+            vm_name,
+            None,
+            vm_json_template['cpu_percent'],
+            vm_json_template['vcpu_count'],
+            vm_json_template['image'],
+            vm_json_template['mem_mb'],
+            vm_json_template['networks'])
+
+    def __init__(self, vm_id, name, state, cpu, vcpu, image, mem_mb, networks):
+        self.id = vm_id
+        self.name = name
+        self.state = state
+        self.cpu = cpu
+        self.vcpu = vcpu
+        self.image = image
+        self.mem_mb = mem_mb
+        self.networks = networks
 
     def __repr__(self):
-        return "VmInfo[id={0}, name={1}, state={2}, cpu={3}, vcpu={4}, image={5}, mem_mb={6}, network={7}]".format(self.id, self.name, self.state, self.cpu, self.vcpu, self.image, self.mem_mb, self.network)
+        return "VmInfo[id={0}, name={1}, state={2}, cpu={3}, vcpu={4}, image={5}, mem_mb={6}, networks={7}]".format(self.id, self.name, self.state, self.cpu, self.vcpu, self.image, self.mem_mb, self.networks)
 
 
 class OpenNebula:
@@ -62,20 +87,19 @@ class OpenNebula:
                 result = subprocess.run([command, "--version"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             except Exception as e:
                 raise Exception("Error while running command (reason : {0})".format(command, e))
-            logging.info("Command '{0}' found, returned {1}".format(command, result.returncode))
+            logging.debug("Command '{0}' found, returned {1}".format(command, result.returncode))
 
     def set_user_info(self):
         try:
             result = self.command_xml("oneuser", "show")
         except Exception as e:
             raise Exception("Error while running command, try to log in using `oneuser login your_user_name --force` first (reason : {0})".format(e))
-        logging.info("User has a valid authorization token")
         root = ElementTree.fromstring(result)
         self.uid = int(root.find("ID").text)
         self.gid = int(root.find("GID").text)
-        logging.debug("uid={0} gid={0}".format(self.uid, self.gid))
+        logging.info("User has a valid authorization token (uid={0} gid={0})".format(self.uid, self.gid))
 
-    def list_vm(self):
+    def vm_list(self):
         vms = {}
         try:
             result = self.command_xml("onevm", "list")
@@ -83,10 +107,17 @@ class OpenNebula:
             raise Exception("Error while running command (reason : {0})".format(e))
         root = ElementTree.fromstring(result)
         for vm_elem in root.findall("VM"):
-            vm = VmInfo(vm_elem)
+            vm = VmInfo.fromOneXml(vm_elem)
             vms[vm.name] = vm
         logging.debug("VM list: {0}".format(vms))
         return vms
+
+    def vm_create(self, vm_info):
+        logging.debug("Creating vm: {0}".format(vm_info))
+
+
+    def vm_destroy(self, vm_info):
+        logging.debug("Destroying vm: {0}".format(vm_info))
 
     def __init__(self):
         self.set_user_info()
@@ -98,6 +129,7 @@ class App:
         self.args = args
         self.setup_logging()
         self.target = self.load(args.jsonfile)
+        self.existing = {}
         logging.debug("VM definitions: {0}".format(self.target))
         OpenNebula.verify_environment()
         OpenNebula.verify_commands()
@@ -130,18 +162,56 @@ class App:
         defs = {}
         for vm_name, template_name in jdata['hosts'].items():
             full_name = "{0}-{1}".format(jdata['platformName'], vm_name)
-            defs[full_name] = jdata['templates'][template_name]
+            defs[full_name] = VmInfo.fromJsonDefinition(full_name, jdata['templates'][template_name])
+        logging.debug("Definitions: {0}".format(defs))
         return defs
 
     def load(self, jsonfile):
         with open(self.args.jsonfile) as fileobj:
             j = json.load(fileobj)
+            self.platformName = j['platformName']
             if int(j['formatVersion']) == 1:
                 return self.load_v1(j)
             raise Exception("Unhandled format {0}".format(j['formatVersion']))
 
+    def create(self, vm_name):
+        logging.warning("VM {0} does not exist, creating it".format(vm_name))
+        self.one.vm_create(self.target[vm_name])
+
+    def verify(self, vm_name):
+        logging.info("Verifying VM {0}".format(vm_name))
+        pass
+
+    def destroy(self, vm_name):
+        logging.info("Destroying VM {0}".format(vm_name))
+        self.one.vm_destroy(self.existing[vm_name])
+
+    def list(self, platformName):
+        vms = self.one.vm_list()
+        # ignoring VM without our prefix
+        keys = [ x for x in vms.keys() ]
+        for key in keys:
+            vm = vms[key]
+            if not vm.name.startswith(platformName):
+                logging.debug("Ignoring VM {0}".format(vm.name))
+                vms.pop(key)
+        return vms
+
     def run(self):
-        vms = self.one.list_vm()
+        # get existing vm for our platform
+        self.existing = self.list(self.platformName)
+        # compute sets for actions
+        current = set(self.existing.keys())
+        target = set(self.target.keys())
+        # create what must be created
+        for vm_name in target.difference(current):
+            self.create(vm_name)
+        # verify what could differ
+        for vm_name in target.intersection(current):
+            self.verify(vm_name)
+        # delete what should not be there
+        for vm_name in current.difference(target):
+            self.destroy(vm_name)
 
 
 if __name__ == '__main__':
