@@ -168,7 +168,6 @@ class VmInfo:
             pass
         try:
             disk_overrides = params['disks']
-            print(disk_overrides)
             self.disks = []
             for disk_override in disk_overrides:
                 disk = VmDisk()
@@ -183,6 +182,18 @@ class VmInfo:
         except KeyError:
             pass
         # logging.debug("After override vm : {0}".format(self))
+
+    def compare_config_except_disks(self, target):
+        differences = {}
+        if self.cpu != target.cpu:
+            differences['cpu'] = [self.cpu, target.cpu]
+        if self.vcpu != target.vcpu:
+            differences['vcpu'] = [self.vcpu, target.vcpu]
+        if self.mem_mb != target.mem_mb:
+            differences['mem_mb'] = [self.mem_mb, target.mem_mb]
+        if self.networks != target.networks:
+            differences['networks'] = [self.networks, target.networks]
+        return differences
 
 
 class OpenNebula:
@@ -368,24 +379,12 @@ class App:
         target = self.target[vm_name]
         if current.name != target.name:
             raise Exception("Both VM do not refer to the same host")
-        differs = False
-        if current.cpu != target.cpu:
-            logging.info("VM {0} has {1} cpu but should have {2}".format(current.name, current.cpu, target.cpu))
-            differs = True
-        if current.vcpu != target.vcpu:
-            logging.info("VM {0} has {1} vcpu but should have {2}".format(current.name, current.vcpu, target.vcpu))
-            differs = True
-        if current.mem_mb != target.mem_mb:
-            logging.info("VM {0} has {1} mem_mb but should have {2}".format(current.name, current.mem_mb, target.mem_mb))
-            differs = True
-        if current.image != target.image:
-            logging.info("VM {0} has {1} image but should have {2}".format(current.name, current.image, target.image))
-            differs = True
-        if current.networks != target.networks:
-            logging.info("VM {0} has {1} networks but should have {2}".format(current.name, current.networks, target.networks))
-            differs = True
-        if differs:
-            logging.info("VM {0} needs reconfiguration".format(current.name))
+        differences = current.compare_config_except_disks(target)
+        delta = ", ".join([
+            "existing {0} must change from {1} to {2}".format(key, change[0], change[1])
+            for key, change in differences.items()
+            ])
+        print("{0}: {1}".format(vm_name, delta))
 
     def destroy(self, vm_name):
         logging.warning("Destroying unreferenced VM {0}".format(vm_name))
@@ -425,6 +424,7 @@ class App:
             for vm_name in missing:
                 self.create(vm_name)
         elif self.args.action == "verify-present":
+            logging.warning("Due to difference in image naming and size between json file and opennebula xml, disks configuration is not verified")
             # verify what could differ
             for vm_name in present:
                 self.verify(vm_name)
