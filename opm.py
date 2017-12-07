@@ -380,11 +380,12 @@ class App:
         if current.name != target.name:
             raise Exception("Both VM do not refer to the same host")
         differences = current.compare_config_except_disks(target)
-        delta = ", ".join([
-            "existing {0} must change from {1} to {2}".format(key, change[0], change[1])
-            for key, change in differences.items()
-            ])
-        print("{0}: {1}".format(vm_name, delta))
+        if len(differences) > 0:
+            delta = ", ".join([
+                "existing {0} must change from {1} to {2}".format(key, change[0], change[1])
+                for key, change in differences.items()
+                ])
+            print("{0}: {1}".format(vm_name, delta))
 
     def destroy(self, vm_name):
         logging.warning("Destroying unreferenced VM {0}".format(vm_name))
