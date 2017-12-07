@@ -76,7 +76,7 @@ class VmInfo:
         #     <MEMORY><![CDATA[256]]></MEMORY>
         #     <NIC> *many*
         #       <NETWORK><![CDATA[cloud]]></NETWORK>
-        #       <ORDER><![CDATA[1]]></ORDER>
+        #       <NIC_ID>0</NIC_ID>
         #     </NIC>
         #     <VCPU><![CDATA[1]]></VCPU>
         # </VM>
@@ -101,13 +101,18 @@ class VmInfo:
         if value is not None:
             vm.mem_mb = int(value.text)
         # extract networks
-        value = vm_elem.findall("TEMPLATE/NIC/NETWORK")
+        value = vm_elem.findall("TEMPLATE/NIC")
         if value is not None:
-            vm.networks = [ x.text for x in value ]
+            vm.networks = {}
+            for nic_elem in value:
+                name = nic_elem.find("NETWORK").text
+                order = int(nic_elem.find("NIC_ID").text)
+                vm.networks[order] = name
+            vm.networks = [ vm.networks[key] for key in sorted(vm.networks.keys()) ]
         # extract disks
         value = vm_elem.findall("TEMPLATE/DISK")
         if value is not None:
-            vm.networks = [ VmDisk.from_one_xml(x) for x in value ]
+            vm.disks = [ VmDisk.from_one_xml(x) for x in value ]
         # extract template
         vm.template = None
         # extract id
