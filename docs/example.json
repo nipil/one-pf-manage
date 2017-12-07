@@ -1,37 +1,74 @@
 {
-    "formatVersion":"1",
-    "platformName":"project-version",
-    "templates":{
-        "ttylinux":{
-            "cpu_percent": 1,
-            "vcpu_count": 1,
-            "mem_mb": 128,
+    "format_version":"2",
+    "platform_name":"project-version",
+    "defaults":{
+        "cpu_percent": 0.1,
+        "vcpu_count": 1,
+        "mem_mb": 128,
+        "disks": [{
             "image": "ttylinux",
-            "networks":[
-                "cloud"
-            ]
+            "size_mb": 256
+        }],
+        "networks":[]
+    },
+    "classes":{
+        "class_with_template":{
+            "template": "ttylinux",
+            "mem_mb": 512
+        },
+        "ttylinux":{
+            "disks": [{ "image": "ttylinux" }],
+            "vcpu_count": 2
         },
         "ttylinux_multi_network":{
-            "cpu_percent": 1,
-            "vcpu_count": 1,
-            "mem_mb": 128,
-            "image": "ttylinux",
             "networks":[
                 "cloud",
                 "cloud"
             ]
         },
         "ttylinux_no_network":{
-            "cpu_percent": 1,
-            "vcpu_count": 1,
-            "mem_mb": 128,
-            "image": "ttylinux",
-            "networks":[]
+            "mem_mb": 256,
+            "vcpu_count": 2,
+            "disks":[]
+        },
+        "add_two_disks":{
+            "template": "ttylinux",
+            "disks":[
+                {
+                    "image": "ttylinux",
+                    "size_mb": 512
+                },
+                {
+                    "image": "ttylinux",
+                    "size_mb": 384
+                }
+            ]
         }
     },
     "hosts":{
-        "srv1":"ttylinux",
-        "srv2":"ttylinux_no_network",
-        "srv3":"ttylinux_multi_network"
+        "srv1":{
+            "class": "ttylinux",
+            "override":{
+                "vcpu_count": 3
+            }
+        },
+        "srv2":{
+            "class": "ttylinux_no_network"
+        },
+        "srv3":{
+            "class": "ttylinux_multi_network",
+            "override":{
+                "template": "ttylinux"
+            }
+        },
+        "srv4":{
+            "class": "class_with_template",
+            "override":{
+                "vcpu_count": 3
+            }
+        },
+        "srv5":{
+            "class": "add_two_disks"
+        }
     }
 }

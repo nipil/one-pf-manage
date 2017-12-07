@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import copy
 import json
 import logging
 import os
@@ -8,69 +9,194 @@ import subprocess
 import xml.etree.ElementTree as ElementTree
 
 
+class VmDisk:
+
+    def __init__(self, image=None, size_mb=None):
+        self.image = image
+        self.size_mb = size_mb
+
+    def __repr__(self):
+        return "VmDisk[image={0}, size_mb={1}]".format(self.image, self.size_mb)
+
+    def override_config(self, params):
+        logging.debug("Before override disk : {0}".format(self))
+        logging.debug("Overriding disk with : {0}".format(params))
+        try:
+            self.image = params['image']
+            logging.debug("image overridden to {0}".format(self.image))
+        except KeyError:
+            pass
+        try:
+            self.size_mb = params['size_mb']
+            logging.debug("size_mb overridden to {0}".format(self.size_mb))
+        except KeyError:
+            pass
+        logging.debug("After override vm : {0}".format(self))
+
+    def to_arg(self):
+        if self.size_mb is None:
+            return self.image
+        else:
+            return "{0}:size_mb={1}".format(self.image, self.size_mb)
+
+    @staticmethod
+    def from_one_xml(disk_elem):
+        # <DISK>
+        #     <IMAGE><![CDATA[ttylinux]]></IMAGE>
+        #     <SIZE><![CDATA[40]]></SIZE>
+        disk = VmDisk()
+        # logging.debug("Xml: {0}".format(ElementTree.tostring(disk_elem)))
+        # extract image
+        value = disk_elem.find("IMAGE")
+        if value is not None:
+            disk.image = value.text
+        # extract cpu
+        value = disk_elem.find("SIZE")
+        if value is not None:
+            disk.vcpu = int(value.text)
+        # return cosntructed
+        # logging.debug("Parsed: {0}".format(disk))
+        return disk
+
+
 class VmInfo:
 
     @staticmethod
-    def fromOneXml(vm_xml):
-        # ElementTree.dump(vm_xml)
-        vcpu = vm_xml.find("TEMPLATE/VCPU")
-        if vcpu is None:
-            vcpu = 1
+    def from_one_xml(vm_elem):
+        # <VM>
+        #   <ID>10</ID>
+        #   <NAME>test</NAME>
+        #   <STATE>8</STATE>
+        #   <TEMPLATE>
+        #     <CPU><![CDATA[0.1]]></CPU>
+        #     <DISK> *many*
+        #       <IMAGE><![CDATA[ttylinux]]></IMAGE>
+        #       <SIZE><![CDATA[40]]></SIZE>
+        #     </DISK>
+        #     <MEMORY><![CDATA[256]]></MEMORY>
+        #     <NIC> *many*
+        #       <NETWORK><![CDATA[cloud]]></NETWORK>
+        #       <ORDER><![CDATA[1]]></ORDER>
+        #     </NIC>
+        #     <VCPU><![CDATA[1]]></VCPU>
+        # </VM>
+        vm = VmInfo()
+        # logging.debug("Xml: {0}".format(ElementTree.tostring(vm_elem)))
+        # extract name
+        value = vm_elem.find("NAME")
+        if value is not None:
+            vm.name = value.text
+        # extract cpu
+        value = vm_elem.find("TEMPLATE/CPU")
+        if value is not None:
+            vm.cpu = float(value.text)
+        # extract vcpu
+        value = vm_elem.find("TEMPLATE/VCPU")
+        if value is not None:
+            vm.vcpu = int(value.text)
         else:
-            vcpu = int(vcpu.text)
-        networks = [ x.text for x in vm_xml.findall("TEMPLATE/NIC/NETWORK") ]
-        return VmInfo(
-            int(vm_xml.find("ID").text),
-            vm_xml.find("NAME").text,
-            int(vm_xml.find("STATE").text),
-            float(vm_xml.find("TEMPLATE/CPU").text),
-            vcpu,
-            vm_xml.find("TEMPLATE/DISK/IMAGE").text,
-            int(vm_xml.find("TEMPLATE/MEMORY").text),
-            networks)
+            vm.vcpu = 1
+        # extract mem_mb
+        value = vm_elem.find("TEMPLATE/MEMORY")
+        if value is not None:
+            vm.mem_mb = int(value.text)
+        # extract networks
+        value = vm_elem.findall("TEMPLATE/NIC/NETWORK")
+        if value is not None:
+            vm.networks = [ x.text for x in value ]
+        # extract disks
+        value = vm_elem.findall("TEMPLATE/DISK")
+        if value is not None:
+            vm.networks = [ VmDisk.from_one_xml(x) for x in value ]
+        # extract template
+        vm.template = None
+        # extract id
+        value = vm_elem.find("ID")
+        if value is not None:
+            vm.id = int(value.text)
+        # extract state
+        value = vm_elem.find("STATE")
+        if value is not None:
+            vm.state = int(value.text)
+        # return constructed
+        logging.debug("Parsed: {0}".format(vm))
+        return vm
 
-    @staticmethod
-    def fromJsonDefinition(vm_name, vm_json_template):
-        return VmInfo(
-            None,
-            vm_name,
-            None,
-            vm_json_template['cpu_percent'],
-            vm_json_template['vcpu_count'],
-            vm_json_template['image'],
-            vm_json_template['mem_mb'],
-            vm_json_template['networks'])
-
-    def __init__(self, vm_id, name, state, cpu, vcpu, image, mem_mb, networks):
-        self.id = vm_id
+    def __init__(self, name=None, cpu=None, vcpu=None, mem_mb=None, networks=None, disks=None, template=None, vm_id=None, state=None):
+        # configuration
         self.name = name
-        self.state = state
         self.cpu = cpu
         self.vcpu = vcpu
-        self.image = image
         self.mem_mb = mem_mb
         self.networks = networks
+        self.disks = disks
+        self.template = template
+        # state
+        self.id = vm_id
+        self.state = state
 
     def __repr__(self):
-        return "VmInfo[id={0}, name={1}, state={2}, cpu={3}, vcpu={4}, image={5}, mem_mb={6}, networks={7}]".format(self.id, self.name, self.state, self.cpu, self.vcpu, self.image, self.mem_mb, self.networks)
+        return "VmInfo[name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, template={6}, id={7}, state={8}]".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.template, self.id, self.state)
+
+    def override_config(self, params):
+        # logging.debug("Before override vm : {0}".format(self))
+        # logging.debug("Overriding vm with : {0}".format(params))
+        try:
+            self.cpu = params['cpu_percent']
+            # logging.debug("cpu overridden to {0}".format(self.cpu))
+        except KeyError:
+            pass
+        try:
+            self.vcpu = params['vcpu_count']
+            # logging.debug("vcpu overridden to {0}".format(self.vcpu))
+        except KeyError:
+            pass
+        try:
+            self.mem_mb = params['mem_mb']
+            # logging.debug("mem_mb overridden to {0}".format(self.mem_mb))
+        except KeyError:
+            pass
+        try:
+            self.networks = params['networks']
+            # logging.debug("networks overridden to {0}".format(self.networks))
+        except KeyError:
+            pass
+        try:
+            disk_overrides = params['disks']
+            print(disk_overrides)
+            self.disks = []
+            for disk_override in disk_overrides:
+                disk = VmDisk()
+                disk.override_config(disk_override)
+                self.disks.append(disk)
+            # logging.debug("disks overridden to {0}".format(self.disks))
+        except KeyError:
+            pass
+        try:
+            self.template = params['template']
+            # logging.debug("template overridden to {0}".format(self.template))
+        except KeyError:
+            pass
+        # logging.debug("After override vm : {0}".format(self))
 
 
 class OpenNebula:
 
     ENV_ONEXMLRPC="ONE_XMLRPC"
 
-    ONE_COMMANDS=["oneuser", "onevm"]
+    ONE_COMMANDS=["oneuser", "onevm", "onetemplate"]
 
     @staticmethod
     def command(name, *args):
         command = [name, *args]
+        logging.debug("Command: {0}".format(command))
         try:
             result = subprocess.run(command, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         except Exception as e:
             raise Exception("Error while running command {0} (reason : {1})".format(command, e))
         if result.returncode != 0:
             raise Exception("Error while running command {0} (return code : {1}, stdout: {2}, stderr: {3})".format(command, result.returncode, result.stdout, result.stderr))
-        logging.debug("STDOUT: {0}".format(result.stdout))
+        # logging.debug("STDOUT: {0}".format(result.stdout))
         return result.stdout.decode()
 
     @classmethod
@@ -97,6 +223,7 @@ class OpenNebula:
         except Exception as e:
             raise Exception("Error while running command, try to log in using `oneuser login your_user_name --force` first (reason : {0})".format(e))
         root = ElementTree.fromstring(result)
+        # logging.debug("XML: {0}".format(ElementTree.tostring(root)))
         self.uid = int(root.find("ID").text)
         self.gid = int(root.find("GID").text)
         logging.info("User has a valid authorization token (uid={0} gid={0})".format(self.uid, self.gid))
@@ -108,23 +235,26 @@ class OpenNebula:
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
         root = ElementTree.fromstring(result)
-        # ElementTree.dump(root)
+        # logging.debug("XML: {0}".format(ElementTree.tostring(root)))
         for vm_elem in root.findall("VM"):
-            vm = VmInfo.fromOneXml(vm_elem)
+            vm = VmInfo.from_one_xml(vm_elem)
             vms[vm.name] = vm
-        logging.debug("VM list: {0}".format(vms))
+        # logging.debug("VM list: {0}".format(vms))
         return vms
 
     def vm_create(self, vm_info):
         logging.debug("Creating vm: {0}".format(vm_info))
         args = ["--name", vm_info.name,
+                "--hold", # in case template uses PXE
                 "--cpu", str(vm_info.cpu),
                 "--vcpu", str(vm_info.vcpu),
-                "--memory", "{0}m".format(vm_info.mem_mb),
-                "--disk", vm_info.image]
+                "--memory", "{0}m".format(vm_info.mem_mb)]
         if len(vm_info.networks) > 0:
             args.append("--nic")
             args.append(",".join(vm_info.networks))
+        if len(vm_info.disks) > 0:
+            args.append("--disk")
+            args.append(",".join([ x.to_arg() for x in vm_info.disks]))
         try:
             result = self.command("onevm", "create", *args)
         except Exception as e:
@@ -138,7 +268,7 @@ class OpenNebula:
     def vm_destroy(self, vm_info):
         logging.debug("Destroying vm: {0}".format(vm_info))
         try:
-            result = self.command("onevm", "delete", str(vm_info.id))
+            result = self.command("onevm", "terminate", str(vm_info.id))
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
 
@@ -153,7 +283,6 @@ class App:
         self.setup_logging()
         self.target = self.load(args.jsonfile)
         self.existing = {}
-        logging.debug("VM definitions: {0}".format(self.target))
         OpenNebula.verify_environment()
         OpenNebula.verify_commands()
         self.one = OpenNebula()
@@ -181,21 +310,46 @@ class App:
         root_logger.addHandler(handler)
         logging.debug("Command line arguments: {0}".format(args))
 
-    def load_v1(self, jdata):
+    def load_v2(self, jdata):
         defs = {}
-        for vm_name, template_name in jdata['hosts'].items():
-            full_name = "{0}-{1}".format(jdata['platformName'], vm_name)
-            defs[full_name] = VmInfo.fromJsonDefinition(full_name, jdata['templates'][template_name])
-        logging.debug("Definitions: {0}".format(defs))
+        self.platform_name = jdata['platform_name']
+        for vm_name, vm_def in jdata['hosts'].items():
+            logging.debug("VM {0} definition {1}".format(vm_name, vm_def))
+            # initialize vm data
+            vm = VmInfo()
+            vm.name = "{0}-{1}".format(self.platform_name, vm_name)
+            # load default configuration
+            try:
+                defaults = jdata['defaults']
+            except KeyError:
+                defaults = None
+            if defaults is not None:
+                vm.override_config(defaults)
+            logging.debug("VM after defaults {0}".format(vm))
+            # apply class overrides
+            vm_class = vm_def['class']
+            vm_class_def = jdata['classes'][vm_class]
+            vm.override_config(vm_class_def)
+            logging.debug("VM after class override {0}".format(vm))
+            # apply host override
+            try:
+                override = vm_def['override']
+            except KeyError:
+                override = None
+            if override is not None:
+                vm.override_config(override)
+            logging.debug("VM after host override {0}".format(vm))
+            # store final
+            defs[vm_name] = vm
+        logging.debug("VM definitions: {0}".format(defs))
         return defs
 
     def load(self, jsonfile):
         with open(self.args.jsonfile) as fileobj:
             j = json.load(fileobj)
-            self.platformName = j['platformName']
-            if int(j['formatVersion']) == 1:
-                return self.load_v1(j)
-            raise Exception("Unhandled format {0}".format(j['formatVersion']))
+            if int(j['format_version']) == 2:
+                return self.load_v2(j)
+            raise Exception("Unhandled format {0}".format(j['format_version']))
 
     def create(self, vm_name):
         logging.warning("VM {0} does not exist, creating it".format(vm_name))
@@ -234,19 +388,20 @@ class App:
         self.one.vm_destroy(vm)
         logging.info("Destroyed VM with ID {0}".format(vm.id))
 
-    def list(self, platformName):
+    def list(self, platform_name):
         vms = self.one.vm_list()
         # ignoring VM without our prefix
         vms = {
             key:value for key, value in vms.items()
-            if value.name.startswith("{0}-".format(platformName))
+            if value.name.startswith("{0}-".format(platform_name))
         }
         logging.debug("Filtered VM {0}".format(vms))
+        logging.info("Existing managed VM : {0}".format(",".join(vms.keys())))
         return vms
 
     def run(self):
         # get existing vm for our platform
-        self.existing = self.list(self.platformName)
+        self.existing = self.list(self.platform_name)
         # compute sets for actions
         current = set(self.existing.keys())
         target = set(self.target.keys())
