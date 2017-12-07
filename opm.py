@@ -345,7 +345,7 @@ class App:
                 vm.override_config(override)
             logging.debug("VM after host override {0}".format(vm))
             # store final
-            defs[vm_name] = vm
+            defs[vm.name] = vm
         logging.debug("VM definitions: {0}".format(defs))
         return defs
 
@@ -370,22 +370,22 @@ class App:
             raise Exception("Both VM do not refer to the same host")
         differs = False
         if current.cpu != target.cpu:
-            logging.warning("VM {0} has {1} cpu but should have {2}".format(current.name, current.cpu, target.cpu))
+            logging.info("VM {0} has {1} cpu but should have {2}".format(current.name, current.cpu, target.cpu))
             differs = True
         if current.vcpu != target.vcpu:
-            logging.warning("VM {0} has {1} vcpu but should have {2}".format(current.name, current.vcpu, target.vcpu))
+            logging.info("VM {0} has {1} vcpu but should have {2}".format(current.name, current.vcpu, target.vcpu))
             differs = True
         if current.mem_mb != target.mem_mb:
-            logging.warning("VM {0} has {1} mem_mb but should have {2}".format(current.name, current.mem_mb, target.mem_mb))
+            logging.info("VM {0} has {1} mem_mb but should have {2}".format(current.name, current.mem_mb, target.mem_mb))
             differs = True
         if current.image != target.image:
-            logging.warning("VM {0} has {1} image but should have {2}".format(current.name, current.image, target.image))
+            logging.info("VM {0} has {1} image but should have {2}".format(current.name, current.image, target.image))
             differs = True
         if current.networks != target.networks:
-            logging.warning("VM {0} has {1} networks but should have {2}".format(current.name, current.networks, target.networks))
+            logging.info("VM {0} has {1} networks but should have {2}".format(current.name, current.networks, target.networks))
             differs = True
         if differs:
-            logging.warning("VM {0} needs reconfiguration".format(current.name))
+            logging.info("VM {0} needs reconfiguration".format(current.name))
 
     def destroy(self, vm_name):
         logging.warning("Destroying unreferenced VM {0}".format(vm_name))
@@ -401,24 +401,41 @@ class App:
             if value.name.startswith("{0}-".format(platform_name))
         }
         logging.debug("Filtered VM {0}".format(vms))
-        logging.info("Existing managed VM : {0}".format(",".join(vms.keys())))
+        logging.info("Existing managed VM : {0}".format(", ".join(vms.keys())))
         return vms
 
     def run(self):
-        # get existing vm for our platform
+        # get existing vm FOR OUR PLATFORM
         self.existing = self.list(self.platform_name)
         # compute sets for actions
         current = set(self.existing.keys())
         target = set(self.target.keys())
-        # create what must be created
-        for vm_name in target.difference(current):
-            self.create(vm_name)
-        # verify what could differ
-        for vm_name in target.intersection(current):
-            self.verify(vm_name)
-        # delete what should not be there
-        for vm_name in current.difference(target):
-            self.destroy(vm_name)
+        missing = target.difference(current)
+        present = target.intersection(current)
+        unreferenced = current.difference(target)
+        if self.args.action == "status":
+            for vm_name in missing:
+                print("{0}: missing".format(self.target[vm_name].name))
+            for vm_name in present:
+                print("{0}: present".format(self.target[vm_name].name))
+            for vm_name in unreferenced:
+                print("{0}: unreferenced".format(self.existing[vm_name].name))
+        elif self.args.action == "create-missing":
+            # create what must be created
+            for vm_name in missing:
+                self.create(vm_name)
+        elif self.args.action == "verify-present":
+            # verify what could differ
+            for vm_name in present:
+                self.verify(vm_name)
+        elif self.args.action == "delete-unreferenced":
+            # delete what should not be there
+            for vm_name in unreferenced:
+                self.destroy(vm_name)
+        elif self.args.action == "delete-all":
+            # delete everything that exists related to our platform
+            for vm_name in present:
+                self.destroy(vm_name)
 
 
 if __name__ == '__main__':
@@ -430,6 +447,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser(description="one-pf-manage")
         parser.add_argument("-l", "--log-level", metavar="LVL", choices=["critical", "error", "warning", "info", "debug"], default="warning")
         parser.add_argument("jsonfile")
+        parser.add_argument("action", nargs='?', choices=["status", "create-missing", "verify-present", "delete-unreferenced", "delete-all"], default="status")
         args = parser.parse_args()
         app = App(args)
         app.run()
