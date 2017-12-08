@@ -64,6 +64,7 @@
         },
         "srv5":{
             "class": "add_two_disks"
-        }
+        },
+        "srv6":{}
     }
 }

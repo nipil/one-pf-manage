@@ -343,11 +343,15 @@ class App:
             if defaults is not None:
                 vm.override_config(defaults)
             logging.debug("VM after defaults {0}".format(vm))
-            # apply class overrides
-            vm_class = vm_host_def['class']
-            vm_class_def = jdata['classes'][vm_class]
-            vm.override_config(vm_class_def)
-            logging.debug("VM after class override {0}".format(vm))
+            # apply class overrides if present
+            try:
+                vm_class = vm_host_def['class']
+            except KeyError:
+                vm_class = None
+            if vm_class is not None:
+                vm_class_def = jdata['classes'][vm_class]
+                vm.override_config(vm_class_def)
+                logging.debug("VM after class override {0}".format(vm))
             # apply host override
             vm.override_config(vm_host_def)
             logging.debug("VM after host override {0}".format(vm))
