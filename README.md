@@ -130,6 +130,8 @@ This means that the VM are not created. You can create them :
     project-version-srv5: created ID 40
     project-version-srv4: created ID 41
 
+*Note* : each VM is created on hold to allow for possible `pxe` boot menu. As a consequence, each VM must be released before it starts running. See your OpenNebula documentation for `hold`/`release` operations.
+
 If you then add another host `srv7` into the file, and run `status` :
 
     $ ./opm.py docs/example.json status
