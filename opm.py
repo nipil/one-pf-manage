@@ -113,8 +113,8 @@ class VmInfo:
         value = vm_elem.findall("TEMPLATE/DISK")
         if value is not None:
             vm.disks = [ VmDisk.from_one_xml(x) for x in value ]
-        # extract template
-        vm.template = None
+        # extract one_template
+        vm.one_template = None
         # extract id
         value = vm_elem.find("ID")
         if value is not None:
@@ -127,7 +127,7 @@ class VmInfo:
         logging.debug("Parsed: {0}".format(vm))
         return vm
 
-    def __init__(self, name=None, cpu=None, vcpu=None, mem_mb=None, networks=None, disks=None, template=None, vm_id=None, state=None):
+    def __init__(self, name=None, cpu=None, vcpu=None, mem_mb=None, networks=None, disks=None, one_template=None, vm_id=None, state=None):
         # configuration
         self.name = name
         self.cpu = cpu
@@ -135,13 +135,13 @@ class VmInfo:
         self.mem_mb = mem_mb
         self.networks = networks
         self.disks = disks
-        self.template = template
+        self.one_template = one_template
         # state
         self.id = vm_id
         self.state = state
 
     def __repr__(self):
-        return "VmInfo[name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, template={6}, id={7}, state={8}]".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.template, self.id, self.state)
+        return "VmInfo[name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, id={7}, state={8}]".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.id, self.state)
 
     def override_config(self, params):
         # logging.debug("Before override vm : {0}".format(self))
@@ -177,8 +177,8 @@ class VmInfo:
         except KeyError:
             pass
         try:
-            self.template = params['template']
-            # logging.debug("template overridden to {0}".format(self.template))
+            self.one_template = params['one_template']
+            # logging.debug("one_template overridden to {0}".format(self.one_template))
         except KeyError:
             pass
         # logging.debug("After override vm : {0}".format(self))
@@ -261,7 +261,7 @@ class OpenNebula:
     def vm_create(self, vm_info):
         logging.debug("Creating vm: {0}".format(vm_info))
         args = ["--name", vm_info.name,
-                "--hold", # in case template uses PXE
+                "--hold", # in case one_template uses PXE implicitely
                 "--cpu", str(vm_info.cpu),
                 "--vcpu", str(vm_info.vcpu),
                 "--memory", "{0}m".format(vm_info.mem_mb)]
@@ -326,11 +326,11 @@ class App:
         root_logger.addHandler(handler)
         logging.debug("Command line arguments: {0}".format(args))
 
-    def load_v2(self, jdata):
+    def load_v3(self, jdata):
         defs = {}
         self.platform_name = jdata['platform_name']
-        for vm_name, vm_def in jdata['hosts'].items():
-            logging.debug("VM {0} definition {1}".format(vm_name, vm_def))
+        for vm_name, vm_host_def in jdata['hosts'].items():
+            logging.debug("VM {0} definition {1}".format(vm_name, vm_host_def))
             # initialize vm data
             vm = VmInfo()
             vm.name = "{0}-{1}".format(self.platform_name, vm_name)
@@ -343,17 +343,12 @@ class App:
                 vm.override_config(defaults)
             logging.debug("VM after defaults {0}".format(vm))
             # apply class overrides
-            vm_class = vm_def['class']
+            vm_class = vm_host_def['class']
             vm_class_def = jdata['classes'][vm_class]
             vm.override_config(vm_class_def)
             logging.debug("VM after class override {0}".format(vm))
             # apply host override
-            try:
-                override = vm_def['override']
-            except KeyError:
-                override = None
-            if override is not None:
-                vm.override_config(override)
+            vm.override_config(vm_host_def)
             logging.debug("VM after host override {0}".format(vm))
             # store final
             defs[vm.name] = vm
@@ -363,15 +358,16 @@ class App:
     def load(self, jsonfile):
         with open(self.args.jsonfile) as fileobj:
             j = json.load(fileobj)
-            if int(j['format_version']) == 2:
-                return self.load_v2(j)
+            if int(j['format_version']) == 3:
+                return self.load_v3(j)
             raise Exception("Unhandled format {0}".format(j['format_version']))
 
     def create(self, vm_name):
-        logging.warning("VM {0} does not exist, creating it".format(vm_name))
+        logging.info("VM {0} does not exist, creating it".format(vm_name))
         vm = self.target[vm_name]
         self.one.vm_create(vm)
-        logging.info("Created VM with ID {0}".format(vm.id))
+        logging.debug("Created VM with ID {0}".format(vm.id))
+        print("{0}: created ID {1}".format(vm.name, vm.id))
 
     def verify(self, vm_name):
         logging.info("Verifying VM {0}".format(vm_name))
@@ -385,13 +381,14 @@ class App:
                 "existing {0} must change from {1} to {2}".format(key, change[0], change[1])
                 for key, change in differences.items()
                 ])
-            print("{0}: {1}".format(vm_name, delta))
+            print("{0}: ID {1}, {2}".format(vm_name, current.id, delta))
 
     def destroy(self, vm_name):
-        logging.warning("Destroying unreferenced VM {0}".format(vm_name))
+        logging.info("Destroying unreferenced VM {0}".format(vm_name))
         vm = self.existing[vm_name]
         self.one.vm_destroy(vm)
-        logging.info("Destroyed VM with ID {0}".format(vm.id))
+        logging.debug("Destroyed VM with ID {0}".format(vm.id))
+        print("{0}: destroyed ID {1}".format(vm.name, vm.id))
 
     def list(self, platform_name):
         vms = self.one.vm_list()
@@ -401,7 +398,7 @@ class App:
             if value.name.startswith("{0}-".format(platform_name))
         }
         logging.debug("Filtered VM {0}".format(vms))
-        logging.info("Existing managed VM : {0}".format(", ".join(vms.keys())))
+        logging.info("Existing managed VM : {0}".format(", ".join(vms.keys()) if len(vms) > 0 else "None"))
         return vms
 
     def run(self):
@@ -425,7 +422,7 @@ class App:
             for vm_name in missing:
                 self.create(vm_name)
         elif self.args.action == "verify-present":
-            logging.warning("Due to difference in image naming and size between json file and opennebula xml, disks configuration is not verified")
+            logging.warning("Due to differences in image naming and size between json file and opennebula xml, disks configuration verification is not yet implemented")
             # verify what could differ
             for vm_name in present:
                 self.verify(vm_name)
