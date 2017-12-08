@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import copy
 import json
 import logging
 import os
@@ -328,7 +327,9 @@ class App:
 
     def load_v3(self, jdata):
         defs = {}
-        self.platform_name = jdata['platform_name']
+        self.platform_name = jdata['platform_name'].strip()
+        if len(self.platform_name) == 0:
+            raise Exception("Platform name cannot be empty, because every accessible OpenNebula VM would be considered part of the platform !")
         for vm_name, vm_host_def in jdata['hosts'].items():
             logging.debug("VM {0} definition {1}".format(vm_name, vm_host_def))
             # initialize vm data
