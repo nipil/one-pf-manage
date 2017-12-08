@@ -10,9 +10,9 @@ Describe a bunch of VM with an expressive and flexible DRY json structure, and d
 
 Python 3 script, uses standard modules only : `json`, `logging`, `os`, `re`, `subprocess`, `xml.etree.ElementTree`
 
-Requires OpenNebula CLI tools (`oneuser`, `onevm` and `onetemplate`), see [https://docs.opennebula.org/5.4/deployment/opennebula_installation/frontend_installation.html](official installation instructions).
+Requires OpenNebula CLI tools (`oneuser`, `onevm` and `onetemplate`) for which you can read the [official installation instructions](https://docs.opennebula.org/5.4/deployment/opennebula_installation/frontend_installation.html).
 
-Tested with OpenNebula [https://opennebula.org/tryout/sandboxvirtualbox/](virtual sandbox) using version `5.4`
+Tested with OpenNebula [virtual sandbox](https://opennebula.org/tryout/sandboxvirtualbox/) (using version `5.4`)
 
 # how does it work
 
@@ -20,14 +20,14 @@ An exemple is provided in the `docs` folder.
 
 The principle is the following :
 
-- the `platform_name` defines the prefix for all VM name. It *CANNOT* be empty, or every accessible VM in OpenNebula would be considered part of the project.
+- the `platform_name` defines the prefix for all VM name. It *CANNOT* be empty, or every accessible VM in OpenNebula would be considered part of the platform.
 - the `hosts` element lists all desired VMs ; each VM name will be prefixed with `platform_name`, followed by a dash `-`, followed by the host name
 
 Each host has a "desired" configuration, based on a succession of overrides, with the following precedence :
 
 - initial configuration is read from `defaults`
-- if the host references a `class`, the configuration is updated with the overrides defined in named class
-- the configuration is finally updated with the eventual overrides found in the host definition
+- if the host references a `class`, the configuration is updated with the overrides defined in given class
+- the configuration is finally updated with the eventual overrides found in the given host definition
 
 With the following JSON content :
 
@@ -94,27 +94,23 @@ This yields the following target configurations :
 
 As you can see :
 
-- the vm named is prefixed
+- the vm name uses the platform name as prefix
 - `project-version-srv4` has no overrides at all and equals `default`
 - `project-version-srv3` had only a host override for `vcpu`
 - `project-version-srv2` had only a class override for `one_template`
-- `project-version-srv1` had both a class and a host override both modifying `mem_mb` and its final value respects precedence.
+- `project-version-srv1` had both a class and a host override both modifying `mem_mb` and its final value respects precedence, and a host override for the network.
 
 # pre-requisites
 
-As this tool uses the standard OpenNebula CLI, your environment variables `ONE_XMLRPC` *must* be configured appropriately
+As this tool uses the standard OpenNebula CLI, your environment variables `ONE_XMLRPC` *must* be configured appropriately, for use by the CLI tools.
 
-Besides, you must pre-log in to OpenNebula before running the script (eventually defining `ONE_AUTH` and finally using `oneuser`)
+You *must* pre-log into your OpenNebula cluster using the CLI tools (eventually defining `ONE_AUTH` and using `oneuser`) before running the provided script
 
 # usage
 
 The `-h` option displays available command-line options.
 
-You can start your json template, using `docs/example.json` and the above explanation as an example.
-
-Then you run `./opm.py yourfile.json` (the default operation is `status`)
-
-For the example configuration, this yields :
+You can start your json template, using `docs/example.json` and the above explanation as an example. Then you run `./opm.py yourfile.json` (the default operation is `status`). For the example configuration, this yields :
 
     $ ./opm.py docs/example.json status
     project-version-srv6: missing
