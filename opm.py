@@ -427,28 +427,28 @@ class App:
         present = target.intersection(current)
         unreferenced = current.difference(target)
         if self.args.action == "status":
-            for vm_name in missing:
+            for vm_name in sorted(missing):
                 print("{0}: missing".format(self.target[vm_name].name))
-            for vm_name in present:
+            for vm_name in sorted(present):
                 print("{0}: present".format(self.target[vm_name].name))
-            for vm_name in unreferenced:
+            for vm_name in sorted(unreferenced):
                 print("{0}: unreferenced".format(self.existing[vm_name].name))
         elif self.args.action == "create-missing":
             # create what must be created
-            for vm_name in missing:
+            for vm_name in sorted(missing):
                 self.create(vm_name)
         elif self.args.action == "verify-present":
             logging.warning("Due to differences in image naming and size between json file and opennebula xml, disks configuration verification is not yet implemented")
             # verify what could differ
-            for vm_name in present:
+            for vm_name in sorted(present):
                 self.verify(vm_name)
         elif self.args.action == "delete-unreferenced":
             # delete what should not be there
-            for vm_name in unreferenced:
+            for vm_name in sorted(unreferenced):
                 self.destroy(vm_name)
         elif self.args.action == "delete-all":
             # delete everything that exists related to our platform
-            for vm_name in present:
+            for vm_name in sorted(present):
                 self.destroy(vm_name)
 
 
