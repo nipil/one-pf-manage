@@ -18,19 +18,19 @@ class VmDisk:
         return "VmDisk[image={0}, size_mb={1}]".format(self.image, self.size_mb)
 
     def override_config(self, params):
-        logging.debug("Before override disk : {0}".format(self))
-        logging.debug("Overriding disk with : {0}".format(params))
+        # logging.debug("Before override disk : {0}".format(self))
+        # logging.debug("Overriding disk with : {0}".format(params))
         try:
             self.image = params['image']
-            logging.debug("image overridden to {0}".format(self.image))
+            # logging.debug("image overridden to {0}".format(self.image))
         except KeyError:
             pass
         try:
             self.size_mb = params['size_mb']
-            logging.debug("size_mb overridden to {0}".format(self.size_mb))
+            # logging.debug("size_mb overridden to {0}".format(self.size_mb))
         except KeyError:
             pass
-        logging.debug("After override vm : {0}".format(self))
+        # logging.debug("After override vm : {0}".format(self))
 
     def to_arg(self):
         if self.size_mb is None:
@@ -147,22 +147,22 @@ class VmInfo:
         # logging.debug("Overriding vm with : {0}".format(params))
         try:
             self.cpu = params['cpu_percent']
-            # logging.debug("cpu overridden to {0}".format(self.cpu))
+            logging.debug("cpu overridden to {0}".format(self.cpu))
         except KeyError:
             pass
         try:
             self.vcpu = params['vcpu_count']
-            # logging.debug("vcpu overridden to {0}".format(self.vcpu))
+            logging.debug("vcpu overridden to {0}".format(self.vcpu))
         except KeyError:
             pass
         try:
             self.mem_mb = params['mem_mb']
-            # logging.debug("mem_mb overridden to {0}".format(self.mem_mb))
+            logging.debug("mem_mb overridden to {0}".format(self.mem_mb))
         except KeyError:
             pass
         try:
             self.networks = params['networks']
-            # logging.debug("networks overridden to {0}".format(self.networks))
+            logging.debug("networks overridden to {0}".format(self.networks))
         except KeyError:
             pass
         try:
@@ -172,12 +172,12 @@ class VmInfo:
                 disk = VmDisk()
                 disk.override_config(disk_override)
                 self.disks.append(disk)
-            # logging.debug("disks overridden to {0}".format(self.disks))
+            logging.debug("disks overridden to {0}".format(self.disks))
         except KeyError:
             pass
         try:
             self.one_template = params['one_template']
-            # logging.debug("one_template overridden to {0}".format(self.one_template))
+            logging.debug("one_template overridden to {0}".format(self.one_template))
         except KeyError:
             pass
         # logging.debug("After override vm : {0}".format(self))
@@ -288,7 +288,7 @@ class OpenNebula:
             raise Exception("Error while running command (reason : {0})".format(e))
 
     def __init__(self):
-        self.set_user_info()
+        pass
 
 
 class App:
@@ -296,10 +296,8 @@ class App:
     def __init__(self, args):
         self.args = args
         self.setup_logging()
-        self.target = self.load(args.jsonfile)
+        self.target = {}
         self.existing = {}
-        OpenNebula.verify_environment()
-        OpenNebula.verify_commands()
         self.one = OpenNebula()
 
     def setup_logging(self):
@@ -325,6 +323,18 @@ class App:
         root_logger.addHandler(handler)
         logging.debug("Command line arguments: {0}".format(args))
 
+    def apply_class_recursive(self, jdata, vm, current_definition):
+        try:
+            vm_class = current_definition['class']
+        except KeyError:
+            vm_class = None
+        # depth-first aplpication
+        if vm_class is not None:
+            self.apply_class_recursive(jdata, vm, jdata['classes'][vm_class])
+        # apply provided overrides
+        vm.override_config(current_definition)
+        logging.debug("VM after class override {0}".format(vm))
+
     def load_v3(self, jdata):
         defs = {}
         self.platform_name = jdata['platform_name'].strip()
@@ -343,18 +353,9 @@ class App:
             if defaults is not None:
                 vm.override_config(defaults)
             logging.debug("VM after defaults {0}".format(vm))
-            # apply class overrides if present
-            try:
-                vm_class = vm_host_def['class']
-            except KeyError:
-                vm_class = None
-            if vm_class is not None:
-                vm_class_def = jdata['classes'][vm_class]
-                vm.override_config(vm_class_def)
-                logging.debug("VM after class override {0}".format(vm))
-            # apply host override
-            vm.override_config(vm_host_def)
-            logging.debug("VM after host override {0}".format(vm))
+            # apply overrides recursively by levels (hosts)
+            self.apply_class_recursive(jdata, vm, vm_host_def)
+            logging.debug("VM final configuration {0}".format(vm))
             # store final
             defs[vm.name] = vm
         logging.debug("VM definitions: {0}".format(defs))
@@ -407,7 +408,17 @@ class App:
         return vms
 
     def run(self):
+        # parse data file
+        self.target = self.load(args.jsonfile)
+        # handle parse-only
+        if self.args.action == "parse-only":
+            for key in sorted(self.target):
+                print("{0}: {1}".format(key, self.target[key]))
+            return
         # get existing vm FOR OUR PLATFORM
+        OpenNebula.verify_environment()
+        OpenNebula.verify_commands()
+        self.one.set_user_info()
         self.existing = self.list(self.platform_name)
         # compute sets for actions
         current = set(self.existing.keys())
@@ -450,7 +461,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser(description="one-pf-manage")
         parser.add_argument("-l", "--log-level", metavar="LVL", choices=["critical", "error", "warning", "info", "debug"], default="warning")
         parser.add_argument("jsonfile")
-        parser.add_argument("action", nargs='?', choices=["status", "create-missing", "verify-present", "delete-unreferenced", "delete-all"], default="status")
+        parser.add_argument("action", nargs='?', choices=["status", "create-missing", "verify-present", "delete-unreferenced", "delete-all", "parse-only"], default="status")
         args = parser.parse_args()
         app = App(args)
         app.run()

@@ -44,6 +44,10 @@
                     "size_mb": 384
                 }
             ]
+        },
+        "recursive_example":{
+            "class": "class_with_template",
+            "mem_mb": 64
         }
     },
     "hosts":{
@@ -65,6 +69,10 @@
         "srv5":{
             "class": "add_two_disks"
         },
-        "srv6":{}
+        "srv6":{},
+        "srv7":{
+            "class": "recursive_example",
+            "mem_mb": 96
+        }
     }
 }
