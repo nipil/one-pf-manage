@@ -17,6 +17,13 @@ class VmDisk:
     def __repr__(self):
         return "VmDisk[image={0}, size_mb={1}]".format(self.image, self.size_mb)
 
+
+    def pretty_tostring(self):
+        if self.size_mb is None:
+            return "image {0} of default size".format(self.image)
+        else:
+            return "image {0} of size {1} Mbytes".format(self.image, self.size_mb)
+
     def override_config(self, params):
         # logging.debug("Before override disk : {0}".format(self))
         # logging.debug("Overriding disk with : {0}".format(params))
@@ -141,6 +148,16 @@ class VmInfo:
 
     def __repr__(self):
         return "VmInfo[name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, id={7}, state={8}]".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.id, self.state)
+
+    def pretty_tostring(self):
+        return "name: {0}\n\tcpu: {1}\n\tvcpu: {2}\n\tmem_mb: {3}\n\tone_template: {4}\n\tnetworks: {5}{6}\n\tdisks: {7}{8}".format(
+            self.name, self.cpu, self.vcpu,
+            self.mem_mb,
+            self.one_template,
+            len(self.networks),
+            "".join([ "\n\t\t{0}".format(name) for name in self.networks]),
+            len(self.disks),
+            "".join([ "\n\t\t{0}".format(disk.pretty_tostring()) for disk in self.disks]))
 
     def override_config(self, params):
         # logging.debug("Before override vm : {0}".format(self))
@@ -413,7 +430,7 @@ class App:
         # handle parse-only
         if self.args.action == "parse-only":
             for key in sorted(self.target):
-                print("{0}: {1}".format(key, self.target[key]))
+                print(self.target[key].pretty_tostring())
             return
         # get existing vm FOR OUR PLATFORM
         OpenNebula.verify_environment()
@@ -430,9 +447,9 @@ class App:
             for vm_name in sorted(missing):
                 print("{0}: missing".format(self.target[vm_name].name))
             for vm_name in sorted(present):
-                print("{0}: present".format(self.target[vm_name].name))
+                print("{0}: present ID {1}".format(self.existing[vm_name].name, self.existing[vm_name].id))
             for vm_name in sorted(unreferenced):
-                print("{0}: unreferenced".format(self.existing[vm_name].name))
+                print("{0}: unreferenced ID {1}".format(self.existing[vm_name].name, self.existing[vm_name].id))
         elif self.args.action == "create-missing":
             # create what must be created
             for vm_name in sorted(missing):

@@ -18,7 +18,7 @@
             "mem_mb": 512
         },
         "ttylinux":{
-            "disks": [{ "image": "ttylinux" }],
+            "disks": [],
             "vcpu_count": 2
         },
         "ttylinux_multi_network":{

@@ -47,7 +47,8 @@ With the following JSON content :
         },
         "classes":{
             "more_mem":{ "mem_mb": 512 },
-            "with_template":{ "one_template": "ttylinux" }
+            "with_template":{ "one_template": "ttylinux" },
+            "recursive":{ "class": "more_mem" }
         },
         "hosts":{
             "srv1":{
@@ -57,7 +58,11 @@ With the following JSON content :
             },
             "srv2":{ "class": "with_template" },
             "srv3":{ "vcpu_count": 2 },
-            "srv4":{}
+            "srv4":{},
+            "srv5":{
+                "mem_mb": 384,
+                "class": "recursive"
+            }
         }
     }
 
@@ -67,34 +72,51 @@ This yields the following target configurations :
         cpu: 0.1
         vcpu: 1
         mem_mb: 384
-        networks: None
-        disks: 1 disk with image=ttylinux and size_mb=256
         one_template: None
+        networks: 0
+        disks: 1
+            image ttylinux of size 256 Mbytes
     name: project-version-srv2
         cpu: 0.1
         vcpu: 1
         mem_mb: 128
-        networks: 1 network interface, using 'cloud' network
-        disks: 1 disk, with image=ttylinux and size_mb=256
         one_template: ttylinux
+        networks: 1
+            cloud
+        disks: 1
+            image ttylinux of size 256 Mbytes
     name: project-version-srv3
         cpu: 0.1
         vcpu: 2
         mem_mb: 128
-        networks: 1 network interface, using 'cloud' network
-        disks: 1 disk, with image=ttylinux and size_mb=256
         one_template: None
+        networks: 1
+            cloud
+        disks: 1
+            image ttylinux of size 256 Mbytes
     name: project-version-srv4
         cpu: 0.1
         vcpu: 1
         mem_mb: 128
-        networks: 1 network interface, using 'cloud' network
-        disks: 1 disk, with image=ttylinux and size_mb=256
         one_template: None
+        networks: 1
+            cloud
+        disks: 1
+            image ttylinux of size 256 Mbytes
+    name: project-version-srv5
+        cpu: 0.1
+        vcpu: 1
+        mem_mb: 384
+        one_template: None
+        networks: 1
+            cloud
+        disks: 1
+            image ttylinux of size 256 Mbytes
 
 As you can see :
 
 - the vm name uses the platform name as prefix
+- `project-version-srv5` classes are applied depth-first
 - `project-version-srv4` has no overrides at all and equals `default`
 - `project-version-srv3` had only a host override for `vcpu`
 - `project-version-srv2` had only a class override for `one_template`
@@ -110,64 +132,74 @@ You *must* pre-log into your OpenNebula cluster using the CLI tools (eventually 
 
 The `-h` option displays available command-line options.
 
-You can start your json template, using `docs/example.json` and the above explanation as an example. Then you run `./opm.py yourfile.json` (the default operation is `status`). For the example configuration, this yields :
+You can start your json template, using `docs/example.json` and the above explanation as an example.
+
+In case you have trouble or wonder what gets parsed out of your description, you can use the `parse-only` option.
+
+Then you run `./opm.py yourfile.json` (the default operation is `status`).
+
+For the example configuration, this yields :
 
     $ ./opm.py docs/example.json status
-    project-version-srv6: missing
-    project-version-srv3: missing
-    project-version-srv5: missing
     project-version-srv1: missing
-    project-version-srv4: missing
     project-version-srv2: missing
+    project-version-srv3: missing
+    project-version-srv4: missing
+    project-version-srv5: missing
+    project-version-srv6: missing
+    project-version-srv7: missing
 
 This means that the VM are not created. You can create them :
 
     $ ./opm.py docs/example.json create-missing
-    project-version-srv3: created ID 36
-    project-version-srv6: created ID 37
-    project-version-srv1: created ID 38
-    project-version-srv2: created ID 39
-    project-version-srv5: created ID 40
-    project-version-srv4: created ID 41
+    project-version-srv1: created ID 43
+    project-version-srv2: created ID 44
+    project-version-srv3: created ID 45
+    project-version-srv4: created ID 46
+    project-version-srv5: created ID 47
+    project-version-srv6: created ID 48
+    project-version-srv7: created ID 49
 
 *Note* : each VM is created on hold to allow for possible `pxe` boot menu. As a consequence, each VM must be released before it starts running. See your OpenNebula documentation for `hold`/`release` operations.
 
-If you then add another host `srv7` into the file, and run `status` :
+If you then add another host `srv8` into the file, and run `status` :
 
     $ ./opm.py docs/example.json status
-    project-version-srv7: missing
-    project-version-srv5: present
-    project-version-srv1: present
-    project-version-srv4: present
-    project-version-srv2: present
-    project-version-srv6: present
-    project-version-srv3: present
+    project-version-srv8: missing
+    project-version-srv1: present ID 43
+    project-version-srv2: present ID 44
+    project-version-srv3: present ID 45
+    project-version-srv4: present ID 46
+    project-version-srv5: present ID 47
+    project-version-srv6: present ID 48
+    project-version-srv7: present ID 49
 
 You can create the missing VM with the same creation command :
 
     $ ./opm.py docs/example.json create-missing
-    project-version-srv7: created ID 42
+    project-version-srv8: created ID 50
 
 If you remove a devinition from your file, and run status again :
 
     $ ./opm.py docs/example.json
-    project-version-srv6: present
-    project-version-srv2: present
-    project-version-srv4: present
-    project-version-srv5: present
-    project-version-srv3: present
-    project-version-srv1: present
-    project-version-srv7: unreferenced
+    project-version-srv1: present ID 43
+    project-version-srv2: present ID 44
+    project-version-srv3: present ID 45
+    project-version-srv4: present ID 46
+    project-version-srv5: present ID 47
+    project-version-srv7: present ID 49
+    project-version-srv8: present ID 50
+    project-version-srv6: unreferenced ID 48
 
 You can remove the unreferenced VM using `delete-unreferenced`
 
     $ ./opm.py docs/example.json delete-unreferenced
-    project-version-srv7: destroyed ID 42
+    project-version-srv6: destroyed ID 48
 
 If you update a definition in the json file, and run `verify-present`
 
     $ ./opm.py docs/example.json verify-present
-    project-version-srv6: ID 37, existing vcpu must change from 1 to 2
+    project-version-srv4: ID 46, existing vcpu must change from 4 to 3
 
 *Note*: `verify-present` outputs a `WARNING` about "not yet implemented" disk comparison, but every other configuration element is checked for differences
 
@@ -176,11 +208,12 @@ If you update a definition in the json file, and run `verify-present`
 Finally, you can remove all (existing) platform vm using `delete-all`
 
     $ ./opm.py docs/example.json delete-all
-    project-version-srv3: destroyed ID 36
-    project-version-srv2: destroyed ID 39
-    project-version-srv1: destroyed ID 38
-    project-version-srv4: destroyed ID 41
-    project-version-srv6: destroyed ID 37
-    project-version-srv5: destroyed ID 40
+    project-version-srv1: destroyed ID 43
+    project-version-srv2: destroyed ID 44
+    project-version-srv3: destroyed ID 45
+    project-version-srv4: destroyed ID 46
+    project-version-srv5: destroyed ID 47
+    project-version-srv7: destroyed ID 49
+    project-version-srv8: destroyed ID 50
 
 And _voilà_.
