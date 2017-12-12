@@ -196,14 +196,15 @@ You can remove the unreferenced VM using `delete-unreferenced`
     $ ./opm.py docs/example.json delete-unreferenced
     project-version-srv6: destroyed ID 48
 
-If you update a definition in the json file, and run `verify-present`
+If you update a definition in the json file, and run `synchronize`
 
-    $ ./opm.py docs/example.json verify-present
-    project-version-srv4: ID 46, existing vcpu must change from 4 to 3
+    $ ./opm.py docs/example.json synchronize
+    project-version-srv6: ID 64, changing cpu_percent from 0.1 to 0.2, changing vcpu_count from 1 to 2
+    project-version-srv7: ID 65, changing mem_mb from 96 to 64
 
-*Note*: `verify-present` outputs a `WARNING` about "not yet implemented" disk comparison, but every other configuration element is checked for differences
+*Note*: due to the risk of loss in case of bad behaviour, disk comparison and synchronization is not yet implemented and likely never will
 
-*Note*: in the future, the configuration differences might be applied automatically, if the VM is in the appropriate state.
+*Note*: network is not yet implemented
 
 Finally, you can remove all (existing) platform vm using `delete-all`
 

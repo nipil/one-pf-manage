@@ -202,9 +202,9 @@ class VmInfo:
     def compare_config_except_disks(self, target):
         differences = {}
         if self.cpu != target.cpu:
-            differences['cpu'] = [self.cpu, target.cpu]
+            differences['cpu_percent'] = [self.cpu, target.cpu]
         if self.vcpu != target.vcpu:
-            differences['vcpu'] = [self.vcpu, target.vcpu]
+            differences['vcpu_count'] = [self.vcpu, target.vcpu]
         if self.mem_mb != target.mem_mb:
             differences['mem_mb'] = [self.mem_mb, target.mem_mb]
         if self.networks != target.networks:
@@ -304,6 +304,39 @@ class OpenNebula:
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
 
+    def vm_synchronize(self, vm_info, differences):
+        logging.debug("Synchronizing vm : {0}".format(vm_info))
+        # See https://docs.opennebula.org/5.4/operation/references/vm_states.html
+        # resize
+        args = []
+        params = {
+            'vcpu_count': "--vcpu",
+            'cpu_percent': "--cpu",
+            'mem_mb': "--memory"
+        }
+        for key in params:
+            try:
+                value = differences[key]
+            except KeyError:
+                value = None
+            if value is not None:
+                args.append(params[key])
+                args.append(str(value[1]))
+        if len(args) == 0:
+            logging.info("No difference in vcpu/cpu/mem detected, not resizing VM {0}".format(vm_info.id))
+        else:
+            logging.info("Resizing VM {0} to update envelope".format(vm_info.id))
+            # See https://docs.opennebula.org/5.4/operation/references/vm_states.html
+            if vm_info.state not in [2, 4, 5, 8, 9]:
+                raise Exception("VM {0} is in a state ({1}) where its envelope cannot be modified".format(vm_info.id, vm_info.state))
+            try:
+                result = self.command("onevm", "resize", *args, str(vm_info.id))
+            except Exception as e:
+                raise Exception("Error while running command (reason : {0})".format(e))
+            logging.info("Resizing VM {0} done".format(vm_info.id))
+        # updating VM definition
+        vm_info.override_config({ key: difference[1] for key, difference in differences.items() })
+
     def __init__(self):
         pass
 
@@ -392,8 +425,8 @@ class App:
         logging.debug("Created VM with ID {0}".format(vm.id))
         print("{0}: created ID {1}".format(vm.name, vm.id))
 
-    def verify(self, vm_name):
-        logging.info("Verifying VM {0}".format(vm_name))
+    def synchronize(self, vm_name):
+        logging.info("Synchronizing VM {0}".format(vm_name))
         current = self.existing[vm_name]
         target = self.target[vm_name]
         if current.name != target.name:
@@ -401,10 +434,11 @@ class App:
         differences = current.compare_config_except_disks(target)
         if len(differences) > 0:
             delta = ", ".join([
-                "existing {0} must change from {1} to {2}".format(key, change[0], change[1])
+                "changing {0} from {1} to {2}".format(key, change[0], change[1])
                 for key, change in differences.items()
                 ])
             print("{0}: ID {1}, {2}".format(vm_name, current.id, delta))
+            self.one.vm_synchronize(current, differences)
 
     def destroy(self, vm_name):
         logging.info("Destroying unreferenced VM {0}".format(vm_name))
@@ -454,11 +488,10 @@ class App:
             # create what must be created
             for vm_name in sorted(missing):
                 self.create(vm_name)
-        elif self.args.action == "verify-present":
-            logging.warning("Due to differences in image naming and size between json file and opennebula xml, disks configuration verification is not yet implemented")
-            # verify what could differ
+        elif self.args.action == "synchronize":
+            # synchronize what could differ
             for vm_name in sorted(present):
-                self.verify(vm_name)
+                self.synchronize(vm_name)
         elif self.args.action == "delete-unreferenced":
             # delete what should not be there
             for vm_name in sorted(unreferenced):
@@ -478,7 +511,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser(description="one-pf-manage")
         parser.add_argument("-l", "--log-level", metavar="LVL", choices=["critical", "error", "warning", "info", "debug"], default="warning")
         parser.add_argument("jsonfile")
-        parser.add_argument("action", nargs='?', choices=["status", "create-missing", "verify-present", "delete-unreferenced", "delete-all", "parse-only"], default="status")
+        parser.add_argument("action", nargs='?', choices=["status", "create-missing", "synchronize", "delete-unreferenced", "delete-all", "parse-only"], default="status")
         args = parser.parse_args()
         app = App(args)
         app.run()
