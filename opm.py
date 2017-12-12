@@ -304,36 +304,56 @@ class OpenNebula:
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
 
-    def vm_synchronize(self, vm_info, differences):
-        logging.debug("Synchronizing vm : {0}".format(vm_info))
-        # See https://docs.opennebula.org/5.4/operation/references/vm_states.html
-        # resize
+    def vm_resize(self, vm_info, cpu_percent=None, vcpu_count=None, mem_mb=None):
+        logging.debug("Resizing vm : {0}".format(vm_info))
+        # setup args
         args = []
-        params = {
-            'vcpu_count': "--vcpu",
-            'cpu_percent': "--cpu",
-            'mem_mb': "--memory"
-        }
-        for key in params:
-            try:
-                value = differences[key]
-            except KeyError:
-                value = None
-            if value is not None:
-                args.append(params[key])
-                args.append(str(value[1]))
+        if cpu_percent is not None:
+            args.append("--cpu")
+            args.append(str(cpu_percent))
+        if vcpu_count is not None:
+            args.append("--vcpu")
+            args.append(str(vcpu_count))
+        if mem_mb is not None:
+            args.append("--memory")
+            args.append(str(mem_mb))
+        # skip early if noop
         if len(args) == 0:
             logging.info("No difference in vcpu/cpu/mem detected, not resizing VM {0}".format(vm_info.id))
-        else:
-            logging.info("Resizing VM {0} to update envelope".format(vm_info.id))
-            # See https://docs.opennebula.org/5.4/operation/references/vm_states.html
-            if vm_info.state not in [2, 4, 5, 8, 9]:
-                raise Exception("VM {0} is in a state ({1}) where its envelope cannot be modified".format(vm_info.id, vm_info.state))
-            try:
-                result = self.command("onevm", "resize", *args, str(vm_info.id))
-            except Exception as e:
-                raise Exception("Error while running command (reason : {0})".format(e))
-            logging.info("Resizing VM {0} done".format(vm_info.id))
+            return
+        # enforce state requirements, see https://docs.opennebula.org/5.4/operation/references/vm_states.html
+        if vm_info.state not in [2, 4, 5, 8, 9]:
+            raise Exception("VM {0} is in a state ({1}) where its envelope cannot be modified".format(vm_info.id, vm_info.state))
+        # actual resize operation
+        try:
+            result = self.command("onevm", "resize", *args, str(vm_info.id))
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
+        logging.info("Resizing VM {0} done".format(vm_info.id))
+
+    def vm_synchronize(self, vm_info, differences):
+        logging.debug("Synchronizing vm : {0}".format(vm_info))
+        # resize
+        cpu_percent=vcpu_count=mem_mb=None
+        try:
+            cpu_percent = differences['cpu_percent']
+        except KeyError:
+            cpu_percent = None
+        if cpu_percent is not None:
+            cpu_percent = cpu_percent[1]
+        try:
+            vcpu_count = differences['vcpu_count']
+        except KeyError:
+            vcpu_count = None
+        if vcpu_count is not None:
+            vcpu_count = vcpu_count[1]
+        try:
+            mem_mb = differences['mem_mb']
+        except KeyError:
+            mem_mb = None
+        if mem_mb is not None:
+            mem_mb = mem_mb[1]
+        self.vm_resize(vm_info, cpu_percent, vcpu_count, mem_mb)
         # updating VM definition
         vm_info.override_config({ key: difference[1] for key, difference in differences.items() })
 
