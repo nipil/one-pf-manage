@@ -50,12 +50,17 @@ class VmDisk:
         # <DISK>
         #     <IMAGE><![CDATA[ttylinux]]></IMAGE>
         #     <SIZE><![CDATA[40]]></SIZE>
+        #     <IMAGE_UNAME><![CDATA[serveradmin]]></IMAGE_UNAME>
         disk = VmDisk()
         # logging.debug("Xml: {0}".format(ElementTree.tostring(disk_elem)))
         # extract image
         value = disk_elem.find("IMAGE")
         if value is not None:
             disk.image = value.text
+        # extract owner in case the image is not ours
+        value = disk_elem.find("IMAGE_UNAME")
+        if value is not None:
+            disk.image = "{0}[{1}]".format(value.text, disk.image)
         # extract cpu
         value = disk_elem.find("SIZE")
         if value is not None:
@@ -82,6 +87,7 @@ class VmInfo:
         #     <MEMORY><![CDATA[256]]></MEMORY>
         #     <NIC> *many*
         #       <NETWORK><![CDATA[cloud]]></NETWORK>
+        #       <NETWORK_UNAME><![CDATA[serveradmin]]></NETWORK_UNAME> *optional*
         #       <NIC_ID>0</NIC_ID>
         #     </NIC>
         #     <VCPU><![CDATA[1]]></VCPU>
@@ -113,6 +119,10 @@ class VmInfo:
             for nic_elem in value:
                 name = nic_elem.find("NETWORK").text
                 order = int(nic_elem.find("NIC_ID").text)
+                # extract owner in case the image is not ours
+                owner = nic_elem.find("NETWORK_UNAME")
+                if owner is not None:
+                    name = "{0}[{1}]".format(owner.text, name)
                 vm.networks[order] = name
             vm.networks = [ vm.networks[key] for key in sorted(vm.networks.keys()) ]
         # extract disks
