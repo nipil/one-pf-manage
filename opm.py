@@ -15,8 +15,7 @@ class VmDisk:
         self.size_mb = size_mb
 
     def __repr__(self):
-        return "VmDisk[image={0}, size_mb={1}]".format(self.image, self.size_mb)
-
+        return "VmDisk(image={0}, size_mb={1})".format(self.image, self.size_mb)
 
     def pretty_tostring(self):
         if self.size_mb is None:
@@ -49,7 +48,7 @@ class VmDisk:
     def from_one_xml(disk_elem):
         # <DISK>
         #     <IMAGE><![CDATA[ttylinux]]></IMAGE>
-        #     <SIZE><![CDATA[40]]></SIZE>
+        #     <SIZE_MB><![CDATA[256]]></SIZE_MB>
         #     <IMAGE_UNAME><![CDATA[serveradmin]]></IMAGE_UNAME>
         disk = VmDisk()
         # logging.debug("Xml: {0}".format(ElementTree.tostring(disk_elem)))
@@ -62,12 +61,28 @@ class VmDisk:
         if value is not None:
             disk.image = "{0}[{1}]".format(value.text, disk.image)
         # extract cpu
-        value = disk_elem.find("SIZE")
+        value = disk_elem.find("SIZE_MB")
         if value is not None:
-            disk.vcpu = int(value.text)
-        # return cosntructed
+            disk.size_mb = int(value.text)
+        # return constructed
         # logging.debug("Parsed: {0}".format(disk))
         return disk
+
+    def __eq__(self, other):
+        # logging.debug("Comparing {0} == {1}".format(self, other))
+        # image must be defined
+        if self.image is None or other.image is None:
+            raise Exception("A disk must be based on an image")
+        if self.image != other.image:
+            return False
+        # using default size always returns true
+        if self.size_mb is None or other.size_mb is None:
+            return True
+        return self.size_mb == other.size_mb
+
+    def __ne__(self, other):
+        # logging.debug("Comparing {0} != {1}".format(self, other))
+        return not self.__eq__(other)
 
 
 class VmInfo:
@@ -157,7 +172,7 @@ class VmInfo:
         self.state = state
 
     def __repr__(self):
-        return "VmInfo[name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, id={7}, state={8}]".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.id, self.state)
+        return "VmInfo(name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, id={7}, state={8})".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.id, self.state)
 
     def pretty_tostring(self):
         return "name: {0}\n\tcpu: {1}\n\tvcpu: {2}\n\tmem_mb: {3}\n\tone_template: {4}\n\tnetworks: {5}{6}\n\tdisks: {7}{8}".format(
@@ -209,7 +224,7 @@ class VmInfo:
             pass
         # logging.debug("After override vm : {0}".format(self))
 
-    def compare_config_except_disks(self, target):
+    def compare_config(self, target):
         differences = {}
         if self.cpu != target.cpu:
             differences['cpu_percent'] = [self.cpu, target.cpu]
@@ -219,6 +234,13 @@ class VmInfo:
             differences['mem_mb'] = [self.mem_mb, target.mem_mb]
         if self.networks != target.networks:
             differences['networks'] = [self.networks, target.networks]
+        if len(self.disks) != len(target.disks):
+            differences['disks'] = [self.disks, target.disks]
+        else:
+            for x in range(len(self.disks)):
+                if self.disks[x] != target.disks[x]:
+                    differences['disks'] = [self.disks, target.disks]
+                    break
         return differences
 
 
@@ -353,7 +375,7 @@ class OpenNebula:
     def vm_synchronize(self, vm_info, differences):
         logging.debug("Synchronizing vm : {0}".format(vm_info))
         # resize
-        cpu_percent=vcpu_count=mem_mb=None
+        cpu_percent = vcpu_count = mem_mb = None
         try:
             cpu_percent = differences['cpu_percent']
         except KeyError:
@@ -373,8 +395,28 @@ class OpenNebula:
         if mem_mb is not None:
             mem_mb = mem_mb[1]
         self.vm_resize(vm_info, cpu_percent, vcpu_count, mem_mb)
-        # updating VM definition
-        vm_info.override_config({ key: difference[1] for key, difference in differences.items() })
+        # updating VM definition following resize
+        if cpu_percent is not None:
+            vm_info.cpu = cpu_percent
+        if vcpu_count is not None:
+            vm_info.vcpu = vcpu_count
+        if mem_mb is not None:
+            vm_info.mem_mb = mem_mb
+        logging.debug("VM infos post resize {0}".format(vm_info))
+        # disks
+        try:
+            disks = differences['disks']
+        except KeyError:
+            disks = None
+        if disks is not None:
+            logging.warning("Changing disk topology could lead to data loss, so this function is not implemented and modifications should be done manually")
+        # networks
+        try:
+            networks = differences['networks']
+        except KeyError:
+            networks = None
+        if networks is not None:
+            logging.warning("Changing network topology could break the network configuration of the guest (lose mac/ip leases, change interface names) so this function is not implemented and modifications should be done by hand")
 
     def __init__(self):
         pass
@@ -470,7 +512,7 @@ class App:
         target = self.target[vm_name]
         if current.name != target.name:
             raise Exception("Both VM do not refer to the same host")
-        differences = current.compare_config_except_disks(target)
+        differences = current.compare_config(target)
         if len(differences) > 0:
             delta = ", ".join([
                 "changing {0} from {1} to {2}".format(key, change[0], change[1])
