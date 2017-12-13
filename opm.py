@@ -298,11 +298,20 @@ class OpenNebula:
             args.append("--disk")
             args.append(",".join([ x.to_arg() for x in vm_info.disks]))
         try:
-            result = self.command("onevm", "create", *args)
+            if vm_info.one_template is None:
+                result = self.command("onevm", "create", *args)
+            else:
+                result = self.command("onetemplate", "instantiate", *args, vm_info.one_template)
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
         # store vm id number
-        m = re.search(r'^ID: (\d+)$', result)
+        if vm_info.one_template is None:
+            # onevm output
+            r = r'^ID: (\d+)$'
+        else:
+            # onetemplate output
+            r = r'^VM ID: (\d+)$'
+        m = re.search(r, result)
         if not m:
             raise Exception("Could not detect VM id after creation")
         vm_info.id = int(m.group(1))
