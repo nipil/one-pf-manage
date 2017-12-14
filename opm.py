@@ -493,7 +493,7 @@ class App:
         return defs
 
     def load(self, jsonfile):
-        with open(self.args.jsonfile) as fileobj:
+        with open(jsonfile) as fileobj:
             j = json.load(fileobj)
             if int(j['format_version']) == 3:
                 return self.load_v3(j)
@@ -539,9 +539,14 @@ class App:
         logging.info("Existing managed VM : {0}".format(", ".join(vms.keys()) if len(vms) > 0 else "None"))
         return vms
 
-    def run(self):
+    def run_all(self):
         # parse data file
-        self.target = self.load(args.jsonfile)
+        for json_file in args.jsonfile:
+            logging.info("Processing definition file: {0}".format(json_file))
+            self.target = self.load(json_file)
+            self.run()
+
+    def run(self):
         # handle parse-only
         if self.args.action == "parse-only":
             for key in sorted(self.target):
@@ -591,11 +596,12 @@ if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser(description="one-pf-manage")
         parser.add_argument("-l", "--log-level", metavar="LVL", choices=["critical", "error", "warning", "info", "debug"], default="warning")
-        parser.add_argument("jsonfile")
-        parser.add_argument("action", nargs='?', choices=["status", "create-missing", "synchronize", "delete-unreferenced", "delete-all", "parse-only"], default="status")
+        parser.add_argument("action", choices=["status", "create-missing", "synchronize", "delete-unreferenced", "delete-all", "parse-only"], default="status")
+        parser.add_argument("jsonfile", nargs='+')
         args = parser.parse_args()
+        print(args)
         app = App(args)
-        app.run()
+        app.run_all()
         sys.exit(0)
 
     except KeyboardInterrupt as e:

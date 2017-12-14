@@ -136,11 +136,11 @@ You can start your json template, using `docs/example.json` and the above explan
 
 In case you have trouble or wonder what gets parsed out of your description, you can use the `parse-only` option.
 
-Then you run `./opm.py yourfile.json` (the default operation is `status`).
+Then you run `./opm.py status yourfile.json`
 
 For the example configuration, this yields :
 
-    $ ./opm.py docs/example.json status
+    $ ./opm.py status docs/example.json
     project-version-srv1: missing
     project-version-srv2: missing
     project-version-srv3: missing
@@ -151,7 +151,7 @@ For the example configuration, this yields :
 
 This means that the VM are not created. You can create them :
 
-    $ ./opm.py docs/example.json create-missing
+    $ ./opm.py create-missing docs/example.json
     project-version-srv1: created ID 43
     project-version-srv2: created ID 44
     project-version-srv3: created ID 45
@@ -164,7 +164,7 @@ This means that the VM are not created. You can create them :
 
 If you then add another host `srv8` into the file, and run `status` :
 
-    $ ./opm.py docs/example.json status
+    $ ./opm.py status docs/example.json
     project-version-srv8: missing
     project-version-srv1: present ID 43
     project-version-srv2: present ID 44
@@ -181,7 +181,7 @@ You can create the missing VM with the same creation command :
 
 If you remove a devinition from your file, and run status again :
 
-    $ ./opm.py docs/example.json
+    $ ./opm.py status docs/example.json
     project-version-srv1: present ID 43
     project-version-srv2: present ID 44
     project-version-srv3: present ID 45
@@ -193,12 +193,12 @@ If you remove a devinition from your file, and run status again :
 
 You can remove the unreferenced VM using `delete-unreferenced`
 
-    $ ./opm.py docs/example.json delete-unreferenced
+    $ ./opm.py delete-unreferenced docs/example.json
     project-version-srv6: destroyed ID 48
 
 If you update a definition in the json file, and run `synchronize`
 
-    $ ./opm.py docs/example.json synchronize
+    $ ./opm.py synchronize docs/example.json
     project-version-srv6: ID 64, changing cpu_percent from 0.1 to 0.2, changing vcpu_count from 1 to 2
     project-version-srv7: ID 65, changing mem_mb from 96 to 64
 
@@ -208,7 +208,7 @@ If you update a definition in the json file, and run `synchronize`
 
 Finally, you can remove all (existing) platform vm using `delete-all`
 
-    $ ./opm.py docs/example.json delete-all
+    $ ./opm.py delete-all docs/example.json
     project-version-srv1: destroyed ID 43
     project-version-srv2: destroyed ID 44
     project-version-srv3: destroyed ID 45
