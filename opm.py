@@ -251,6 +251,19 @@ class OpenNebula:
     ONE_COMMANDS=["oneuser", "onevm", "onetemplate"]
 
     @staticmethod
+    def command_implicit_enter(name, *args):
+        command = [name, *args]
+        logging.debug("Command with implicit 'enter' on STDIN: {0}".format(command))
+        try:
+            result = subprocess.run(command, input=b"\n", stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        except Exception as e:
+            raise Exception("Error while running command {0} (reason : {1})".format(command, e))
+        if result.returncode != 0:
+            raise Exception("Error while running command {0} (return code : {1}, stdout: {2}, stderr: {3})".format(command, result.returncode, result.stdout, result.stderr))
+        logging.debug("STDOUT: {0}".format(result.stdout))
+        return result.stdout.decode()
+
+    @staticmethod
     def command(name, *args):
         command = [name, *args]
         logging.debug("Command: {0}".format(command))
@@ -323,7 +336,8 @@ class OpenNebula:
             if vm_info.one_template is None:
                 result = self.command("onevm", "create", *args)
             else:
-                result = self.command("onetemplate", "instantiate", *args, vm_info.one_template)
+                logging.warning("Creation of VM {0} from a template might require a prompt. In that case, this tool chooses the default entry (ie simulates 'enter')")
+                result = self.command_implicit_enter("onetemplate", "instantiate", *args, vm_info.one_template)
         except Exception as e:
             raise Exception("Error while running command (reason : {0})".format(e))
         # store vm id number
@@ -332,7 +346,7 @@ class OpenNebula:
             r = r'^ID: (\d+)$'
         else:
             # onetemplate output
-            r = r'^VM ID: (\d+)$'
+            r = r'VM ID: (\d+)\n'
         m = re.search(r, result)
         if not m:
             raise Exception("Could not detect VM id after creation")
@@ -599,7 +613,6 @@ if __name__ == '__main__':
         parser.add_argument("action", choices=["status", "create-missing", "synchronize", "delete-unreferenced", "delete-all", "parse-only"], default="status")
         parser.add_argument("jsonfile", nargs='+')
         args = parser.parse_args()
-        print(args)
         app = App(args)
         app.run_all()
         sys.exit(0)
