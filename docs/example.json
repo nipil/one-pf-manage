@@ -1,8 +1,10 @@
 {
-    "format_version":"3",
+    "format_version":"4",
     "platform_name":"project-version",
     "defaults":{
         "one_template": null,
+        "group": null,
+        "permissions": null,
         "cpu_percent": 0.1,
         "vcpu_count": 1,
         "mem_mb": 128,
@@ -60,10 +62,12 @@
         },
         "srv3":{
             "class": "ttylinux_multi_network",
+            "group": "oneadmin",
             "one_template": "ttylinux"
         },
         "srv4":{
             "class": "class_with_template",
+            "permissions": "641",
             "vcpu_count": 4
         },
         "srv5":{

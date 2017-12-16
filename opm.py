@@ -91,7 +91,19 @@ class VmInfo:
     def from_one_xml(vm_elem):
         # <VM>
         #   <ID>10</ID>
+        #   <GNAME>oneadmin</GNAME>
         #   <NAME>test</NAME>
+        #   <PERMISSIONS>
+        #     <OWNER_U>1</OWNER_U>
+        #     <OWNER_M>1</OWNER_M>
+        #     <OWNER_A>0</OWNER_A>
+        #     <GROUP_U>0</GROUP_U>
+        #     <GROUP_M>0</GROUP_M>
+        #     <GROUP_A>0</GROUP_A>
+        #     <OTHER_U>0</OTHER_U>
+        #     <OTHER_M>0</OTHER_M>
+        #     <OTHER_A>0</OTHER_A>
+        #   </PERMISSIONS>
         #   <STATE>8</STATE>
         #   <TEMPLATE>
         #     <CPU><![CDATA[0.1]]></CPU>
@@ -113,6 +125,26 @@ class VmInfo:
         value = vm_elem.find("NAME")
         if value is not None:
             vm.name = value.text
+        # extract group
+        value = vm_elem.find("GNAME")
+        if value is not None:
+            vm.group = value.text
+        # extract permissions
+        value = vm_elem.find("PERMISSIONS")
+        if value is not None:
+            u_u = int(value.find("OWNER_U").text)
+            u_m = int(value.find("OWNER_M").text)
+            u_a = int(value.find("OWNER_A").text)
+            g_u = int(value.find("GROUP_U").text)
+            g_m = int(value.find("GROUP_M").text)
+            g_a = int(value.find("GROUP_A").text)
+            o_u = int(value.find("OTHER_U").text)
+            o_m = int(value.find("OTHER_M").text)
+            o_a = int(value.find("OTHER_A").text)
+            vm.permissions = "{0}{1}{2}".format(
+                u_u * 4 + u_m * 2 + u_a,
+                g_u * 4 + g_m * 2 + g_a,
+                o_u * 4 + o_m * 2 + o_a)
         # extract cpu
         value = vm_elem.find("TEMPLATE/CPU")
         if value is not None:
@@ -158,7 +190,7 @@ class VmInfo:
         logging.debug("Parsed: {0}".format(vm))
         return vm
 
-    def __init__(self, name=None, cpu=None, vcpu=None, mem_mb=None, networks=None, disks=None, one_template=None, vm_id=None, state=None):
+    def __init__(self, name=None, cpu=None, vcpu=None, mem_mb=None, networks=None, disks=None, one_template=None, group=None, permissions=None, vm_id=None, state=None):
         # configuration
         self.name = name
         self.cpu = cpu
@@ -167,16 +199,22 @@ class VmInfo:
         self.networks = networks
         self.disks = disks
         self.one_template = one_template
+        self.group = group
+        self.permissions = permissions
         # state
         self.id = vm_id
         self.state = state
 
     def __repr__(self):
-        return "VmInfo(name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, id={7}, state={8})".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.id, self.state)
+        return "VmInfo(name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, group={7}, permissions={8}, id={9}, state={10})".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.group, self.permissions, self.id, self.state)
 
     def pretty_tostring(self):
-        return "name: {0}\n\tcpu: {1}\n\tvcpu: {2}\n\tmem_mb: {3}\n\tone_template: {4}\n\tnetworks: {5}{6}\n\tdisks: {7}{8}".format(
-            self.name, self.cpu, self.vcpu,
+        return "name: {0}\n\tgroup: {1}\n\tpermissions: {2}\n\tcpu: {3}\n\tvcpu: {4}\n\tmem_mb: {5}\n\tone_template: {6}\n\tnetworks: {7}{8}\n\tdisks: {9}{10}".format(
+            self.name,
+            self.group,
+            self.permissions,
+            self.cpu,
+            self.vcpu,
             self.mem_mb,
             self.one_template,
             len(self.networks),
@@ -222,10 +260,24 @@ class VmInfo:
             logging.debug("one_template overridden to {0}".format(self.one_template))
         except KeyError:
             pass
+        try:
+            self.group = params['group']
+            logging.debug("group overridden to {0}".format(self.group))
+        except KeyError:
+            pass
+        try:
+            self.permissions = params['permissions']
+            logging.debug("permissions overridden to {0}".format(self.permissions))
+        except KeyError:
+            pass
         # logging.debug("After override vm : {0}".format(self))
 
     def compare_config(self, target):
         differences = {}
+        if self.group is not None and target.group is not None and self.group != target.group:
+            differences['group'] = [self.group, target.group]
+        if self.permissions is not None and target.permissions is not None and self.permissions != target.permissions:
+            differences['permissions'] = [self.permissions, target.permissions]
         if self.cpu != target.cpu:
             differences['cpu_percent'] = [self.cpu, target.cpu]
         if self.vcpu != target.vcpu:
@@ -304,6 +356,20 @@ class OpenNebula:
         self.uid = int(root.find("ID").text)
         self.gid = int(root.find("GID").text)
         logging.info("User has a valid authorization token (uid={0} gid={0})".format(self.uid, self.gid))
+
+    def vm_set_group(self, vm_info, group):
+        logging.debug("Setting group {0} for vm : {1}".format(group, vm_info))
+        try:
+            result = self.command("onevm", "chgrp", str(vm_info.id), group)
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
+
+    def vm_set_permissions(self, vm_info, permissions):
+        logging.debug("Setting permissions {0} for vm : {1}".format(permissions, vm_info))
+        try:
+            result = self.command("onevm", "chmod", str(vm_info.id), permissions)
+        except Exception as e:
+            raise Exception("Error while running command (reason : {0})".format(e))
 
     def vm_list(self):
         vms = {}
@@ -388,6 +454,24 @@ class OpenNebula:
 
     def vm_synchronize(self, vm_info, differences):
         logging.debug("Synchronizing vm : {0}".format(vm_info))
+        # group
+        try:
+            group = differences['group']
+        except KeyError:
+            group = None
+        if group is not None:
+            group = group[1]
+            if group is not None:
+                self.vm_set_group(vm_info, group)
+        # permissions
+        try:
+            permissions = differences['permissions']
+        except KeyError:
+            permissions = None
+        if permissions is not None:
+            permissions = permissions[1]
+            if permissions is not None:
+                self.vm_set_permissions(vm_info, permissions)
         # resize
         cpu_percent = vcpu_count = mem_mb = None
         try:
@@ -480,7 +564,7 @@ class App:
         vm.override_config(current_definition)
         logging.debug("VM after class override {0}".format(vm))
 
-    def load_v3(self, jdata):
+    def load_v4(self, jdata):
         defs = {}
         self.platform_name = jdata['platform_name'].strip()
         if len(self.platform_name) == 0:
@@ -509,8 +593,8 @@ class App:
     def load(self, jsonfile):
         with open(jsonfile) as fileobj:
             j = json.load(fileobj)
-            if int(j['format_version']) == 3:
-                return self.load_v3(j)
+            if int(j['format_version']) == 4:
+                return self.load_v4(j)
             raise Exception("Unhandled format {0}".format(j['format_version']))
 
     def create(self, vm_name):
