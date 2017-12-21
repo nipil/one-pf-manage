@@ -417,6 +417,12 @@ class OpenNebula:
         if not m:
             raise Exception("Could not detect VM id after creation")
         vm_info.id = int(m.group(1))
+        # set group
+        if vm_info.group is not None:
+            self.vm_set_group(vm_info, vm_info.group)
+        # permissions
+        if vm_info.permissions is not None:
+            self.vm_set_permissions(vm_info, vm_info.permissions)
 
     def vm_destroy(self, vm_info):
         logging.debug("Destroying vm: {0}".format(vm_info))
