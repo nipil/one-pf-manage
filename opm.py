@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import logging
 import os
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ElementTree
 
 
@@ -556,7 +558,7 @@ class App:
         formatter = logging.Formatter(log_format)
         handler.setFormatter(formatter)
         root_logger.addHandler(handler)
-        logging.debug("Command line arguments: {0}".format(args))
+        logging.debug("Command line arguments: {0}".format(self.args))
 
     def apply_class_recursive(self, jdata, vm, current_definition):
         try:
@@ -645,7 +647,7 @@ class App:
 
     def run_all(self):
         # parse data file
-        for json_file in args.jsonfile:
+        for json_file in self.args.jsonfile:
             logging.info("Processing definition file: {0}".format(json_file))
             self.target = self.load(json_file)
             self.run()
@@ -692,10 +694,7 @@ class App:
                 self.destroy(vm_name)
 
 
-if __name__ == '__main__':
-
-    import argparse
-    import sys
+def main():
 
     try:
         parser = argparse.ArgumentParser(description="one-pf-manage")
@@ -724,3 +723,6 @@ if __name__ == '__main__':
         # when debugging, we want the stack-trace
         if args.log_level == "debug":
             raise e
+
+if __name__ == '__main__':
+    main()
