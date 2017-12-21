@@ -42,7 +42,7 @@ class VmDisk:
         if self.size_mb is None:
             return self.image
         else:
-            return "{0}:size_mb={1}".format(self.image, self.size_mb)
+            return "{0}:size={1}".format(self.image, self.size_mb)
 
     @staticmethod
     def from_one_xml(disk_elem):
