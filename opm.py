@@ -211,6 +211,9 @@ class VmInfo:
         return "VmInfo(name={0}, cpu={1}, vcpu={2}, mem_mb={3}, networks={4}, disks={5}, one_template={6}, group={7}, permissions={8}, id={9}, state={10})".format(self.name, self.cpu, self.vcpu, self.mem_mb, self.networks, self.disks, self.one_template, self.group, self.permissions, self.id, self.state)
 
     def pretty_tostring(self):
+        disks = self.disks
+        if disks is None:
+            disks = []
         return "name: {0}\n\tgroup: {1}\n\tpermissions: {2}\n\tcpu: {3}\n\tvcpu: {4}\n\tmem_mb: {5}\n\tone_template: {6}\n\tnetworks: {7}{8}\n\tdisks: {9}{10}".format(
             self.name,
             self.group,
@@ -221,8 +224,8 @@ class VmInfo:
             self.one_template,
             len(self.networks),
             "".join([ "\n\t\t{0}".format(name) for name in self.networks]),
-            len(self.disks),
-            "".join([ "\n\t\t{0}".format(disk.pretty_tostring()) for disk in self.disks]))
+            len(disks),
+            "".join([ "\n\t\t{0}".format(disk.pretty_tostring()) for disk in disks]))
 
     def override_config(self, params):
         # logging.debug("Before override vm : {0}".format(self))
@@ -249,11 +252,14 @@ class VmInfo:
             pass
         try:
             disk_overrides = params['disks']
-            self.disks = []
-            for disk_override in disk_overrides:
-                disk = VmDisk()
-                disk.override_config(disk_override)
-                self.disks.append(disk)
+            if disk_overrides is None:
+                self.disks = None
+            else:
+                self.disks = []
+                for disk_override in disk_overrides:
+                    disk = VmDisk()
+                    disk.override_config(disk_override)
+                    self.disks.append(disk)
             logging.debug("disks overridden to {0}".format(self.disks))
         except KeyError:
             pass
@@ -288,13 +294,14 @@ class VmInfo:
             differences['mem_mb'] = [self.mem_mb, target.mem_mb]
         if self.networks != target.networks:
             differences['networks'] = [self.networks, target.networks]
-        if len(self.disks) != len(target.disks):
+        if self.disks is not None and target.disks is not None and len(self.disks) != len(target.disks):
             differences['disks'] = [self.disks, target.disks]
         else:
-            for x in range(len(self.disks)):
-                if self.disks[x] != target.disks[x]:
-                    differences['disks'] = [self.disks, target.disks]
-                    break
+            if self.disks is not None and target.disks is not None:
+                for x in range(len(self.disks)):
+                    if self.disks[x] != target.disks[x]:
+                        differences['disks'] = [self.disks, target.disks]
+                        break
         return differences
 
 
@@ -397,7 +404,7 @@ class OpenNebula:
         if len(vm_info.networks) > 0:
             args.append("--nic")
             args.append(",".join(vm_info.networks))
-        if len(vm_info.disks) > 0:
+        if vm_info.disks is not None and len(vm_info.disks) > 0:
             args.append("--disk")
             args.append(",".join([ x.to_arg() for x in vm_info.disks]))
         try:
