@@ -404,7 +404,7 @@ class OpenNebula:
         if len(vm_info.networks) > 0:
             args.append("--nic")
             args.append(",".join(vm_info.networks))
-        if len(vm_info.disks) > 0:
+        if vm_info.disks is not None and len(vm_info.disks) > 0:
             args.append("--disk")
             args.append(",".join([ x.to_arg() for x in vm_info.disks]))
         try:
